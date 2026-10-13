@@ -36,6 +36,7 @@ body{font-family:Arial,sans-serif;background:#0f0f14;min-height:100vh;color:#e8e
 .btn-novo{width:100%;padding:14px;background:#2ecc8a;color:#1a1a2e;border:none;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-top:12px}
 .btn-iniciar{display:block;width:calc(100% - 32px);margin:16px auto;padding:18px;background:#2ecc8a;color:#1a1a2e;border:none;border-radius:10px;font-size:17px;font-weight:bold;cursor:pointer}
 .btn-iniciar:disabled{opacity:.4}
+.btn-foto{display:block;width:calc(100% - 32px);margin:0 auto 16px;padding:15px;background:#1a1a2e;color:#e8e6e0;border:1px solid #2ecc8a;border-radius:10px;font-size:15px;font-weight:bold;text-align:center;cursor:pointer}
 .processando{display:none;text-align:center;padding:20px;color:#2ecc8a;font-size:14px}
 .spinner{width:36px;height:36px;border:3px solid #2a2a35;border-top:3px solid #2ecc8a;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -54,6 +55,8 @@ body{font-family:Arial,sans-serif;background:#0f0f14;min-height:100vh;color:#e8e
 
 <div id="tela-iniciar">
   <button class="btn-iniciar" id="btn-iniciar">Abrir câmera e escanear</button>
+  <label class="btn-foto" id="lbl-foto" for="foto">Câmera não abriu? Tirar foto do QR</label>
+  <input type="file" id="foto" accept="image/*" capture="environment" hidden>
 </div>
 
 <div id="tela-scanner" style="display:none">
@@ -76,7 +79,7 @@ const $=id=>document.getElementById(id);
 const bruto=(new URLSearchParams(location.search).get("setor")||"").trim();
 const chave=(SETORES.find(([k])=>k===bruto.toLowerCase())||[])[0]||ANTIGOS[bruto.toLowerCase()]||((SETORES.find(([,n])=>n.toLowerCase()===bruto.toLowerCase())||[])[0]);
 const nomeSetor=chave?(SETORES.find(([k])=>k===chave)||[])[1]:"";
-if(!chave){$("setor-nome").textContent="Setor inválido";$("setor-info").textContent="Leia o QR do cartão do seu setor";$("btn-iniciar").disabled=true;$("f-manual").style.display="none"}
+if(!chave){$("setor-nome").textContent="Setor inválido";$("setor-info").textContent="Leia o QR do cartão do seu setor";$("btn-iniciar").disabled=true;$("lbl-foto").style.display="none";$("f-manual").style.display="none"}
 else{const i=SETORES.findIndex(([k])=>k===chave);$("setor-nome").textContent=nomeSetor;$("setor-info").textContent=(i+1)+"º setor de "+SETORES.length;document.title="Leitor · "+nomeSetor}
 
 let stream=null,timer=null,ocupado=false,detector=null;
@@ -84,7 +87,7 @@ if("BarcodeDetector" in window){try{detector=new BarcodeDetector({formats:["qr_c
 async function iniciar(){
   $("resultado").style.display="none";$("tela-iniciar").style.display="none";$("f-manual").style.display="none";$("tela-scanner").style.display="block";ocupado=false;
   try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false})}
-  catch(e){parar();$("tela-iniciar").style.display="block";mostra("erro","Erro ao acessar a câmera","Verifique a permissão de câmera do navegador e tente de novo. Você também pode digitar o número do pedido.");return}
+  catch(e){parar();$("tela-iniciar").style.display="block";mostra("erro","A câmera não abriu","Use o botão <b>Tirar foto do QR</b> logo acima, ou digite o número do pedido. Dica: abra este link no Chrome (ou Safari no iPhone) e permita a câmera."+(e&&e.name?" <br><small>("+esc(e.name)+")</small>":""));return}
   const v=$("video");v.srcObject=stream;try{await v.play()}catch(e){}
   const cv=document.createElement("canvas"),cx=cv.getContext("2d",{willReadFrequently:true});
   const tick=async()=>{if(!stream||ocupado)return;let val=null;
@@ -111,7 +114,14 @@ async function registrar(lido){
       '<div class="info-item"><div class="info-label">Cliente</div><div class="info-value">'+esc(data.cliente||"—")+'</div></div>'+
       '<div class="info-item"><div class="info-label">Prazo</div><div class="info-value">'+pz+' <span class="badge '+(urg?"badge-urgente":"badge-normal")+'">'+(urg?"Urgente":"Normal")+'</span></div></div></div>')}
   catch(e){$("processando").style.display="none";$("tela-iniciar").style.display="block";mostra("erro","Erro de conexão","Verifique a internet e tente de novo.")}}
-$("btn-iniciar").onclick=iniciar;$("btn-cancelar").onclick=()=>{parar();$("tela-iniciar").style.display="block"};
+$("btn-iniciar").onclick=()=>{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){mostra("erro","Este navegador não abre a câmera ao vivo","Use o botão <b>Tirar foto do QR</b> ou digite o número do pedido.");return}iniciar()};
+$("foto").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;$("resultado").style.display="none";$("processando").style.display="block";
+  try{const img=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=URL.createObjectURL(f)});let val=null;
+    if(detector){try{const r=await detector.detect(img);if(r&&r[0])val=r[0].rawValue}catch(_){}}
+    if(!val&&window.jsQR){for(const W of [1000,700,1400]){const w=Math.min(W,img.naturalWidth),h=Math.round(img.naturalHeight*w/img.naturalWidth);const cv=document.createElement("canvas");cv.width=w;cv.height=h;const cx=cv.getContext("2d");cx.drawImage(img,0,0,w,h);const r=jsQR(cx.getImageData(0,0,w,h).data,w,h);if(r&&r.data){val=r.data;break}}}
+    $("processando").style.display="none";
+    if(!val){mostra("erro","Não achei o QR na foto","Tire a foto mais de perto, com o QR inteiro e bem iluminado.");return}
+    registrar(val)}catch(err){$("processando").style.display="none";mostra("erro","Não consegui abrir a foto","Tente de novo.")}};$("btn-cancelar").onclick=()=>{parar();$("tela-iniciar").style.display="block"};
 $("f-manual").onsubmit=e=>{e.preventDefault();const v=$("num-manual").value.trim();if(!v)return;$("num-manual").value="";registrar(v)};
 })();
 </script>
