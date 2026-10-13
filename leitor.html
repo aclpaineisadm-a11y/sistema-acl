@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Leitor de Pedido · ACL</title>
+<script src="supabase.js"></script>
+<script src="jsQR.js"></script>
+<script src="config.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#0f0f14;min-height:100vh;color:#e8e6e0}
+.header{background:#1a1a2e;padding:14px 18px;text-align:center;border-bottom:1px solid #2a2a35}
+.header h1{font-size:15px;font-weight:bold;color:#e8e6e0}
+.setor-nome{font-size:24px;font-weight:bold;color:#2ecc8a;margin-top:4px}
+.setor-info{font-size:11px;color:#888;margin-top:2px}
+.status{text-align:center;padding:10px 16px;font-size:13px;color:#2ecc8a}
+#cam{position:relative;width:calc(100% - 32px);max-width:420px;margin:8px auto;border-radius:10px;overflow:hidden;background:#000;aspect-ratio:1/1}
+#cam video{width:100%;height:100%;object-fit:cover;display:block}
+#cam .mira{position:absolute;inset:18%;border:3px solid #2ecc8a;border-radius:10px;box-shadow:0 0 0 999px rgba(0,0,0,.35)}
+.btn-cancelar{display:block;margin:6px auto 16px;background:none;border:1px solid #444;color:#aaa;padding:8px 18px;border-radius:8px;font-size:13px}
+.resultado{margin:12px 16px 16px;border-radius:10px;padding:18px;text-align:center;display:none}
+.resultado.ok{background:#0a2a0a;border:2px solid #2ecc8a}
+.resultado.erro{background:#2a0000;border:2px solid #e05050}
+.resultado h3{font-size:18px;font-weight:bold;margin-bottom:8px}
+.resultado.ok h3{color:#2ecc8a}
+.resultado.erro h3{color:#e05050}
+.resultado p{font-size:13px;color:#bbb}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.info-item{background:#1a1a22;border-radius:6px;padding:8px;text-align:center}
+.info-label{font-size:10px;color:#888}
+.info-value{font-size:14px;font-weight:bold;color:#e8e6e0;margin-top:2px;word-break:break-word}
+.badge{font-size:11px;padding:3px 10px;border-radius:10px;font-weight:bold;display:inline-block;margin-top:2px}
+.badge-normal{background:#0c3060;color:#85b7eb}
+.badge-urgente{background:#412402;color:#ef9f27}
+.btn-novo{width:100%;padding:14px;background:#2ecc8a;color:#1a1a2e;border:none;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-top:12px}
+.btn-iniciar{display:block;width:calc(100% - 32px);margin:16px auto;padding:18px;background:#2ecc8a;color:#1a1a2e;border:none;border-radius:10px;font-size:17px;font-weight:bold;cursor:pointer}
+.btn-iniciar:disabled{opacity:.4}
+.processando{display:none;text-align:center;padding:20px;color:#2ecc8a;font-size:14px}
+.spinner{width:36px;height:36px;border:3px solid #2a2a35;border-top:3px solid #2ecc8a;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.manual{display:flex;gap:8px;width:calc(100% - 32px);max-width:420px;margin:0 auto 18px}
+.manual input{flex:1;min-width:0;background:#1a1a22;border:1px solid #2a2a35;color:#e8e6e0;border-radius:8px;padding:12px;font-size:15px}
+.manual button{background:#1a1a2e;color:#e8e6e0;border:1px solid #2a2a35;border-radius:8px;padding:0 16px;font-size:14px;font-weight:bold}
+.rodape{text-align:center;font-size:11px;color:#555;padding:10px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Leitor de pedido</h1>
+  <div class="setor-nome" id="setor-nome">Carregando…</div>
+  <div class="setor-info" id="setor-info"></div>
+</div>
+
+<div id="tela-iniciar">
+  <button class="btn-iniciar" id="btn-iniciar">Abrir câmera e escanear</button>
+</div>
+
+<div id="tela-scanner" style="display:none">
+  <div class="status">Aponte para o QR Code do pedido</div>
+  <div id="cam"><video id="video" playsinline muted></video><div class="mira"></div></div>
+  <button class="btn-cancelar" id="btn-cancelar">Cancelar</button>
+</div>
+
+<div class="processando" id="processando"><div class="spinner"></div><div>Registrando pedido…</div></div>
+<div class="resultado" id="resultado"></div>
+<form class="manual" id="f-manual" autocomplete="off"><input id="num-manual" inputmode="numeric" placeholder="ou digite o nº do pedido"><button type="submit">OK</button></form>
+<div class="rodape">Sistema ACL</div>
+
+<script>
+(function(){
+const SETORES=[["vendas","Vendas"],["desenv","Desenvolvimento"],["pcp","PCP"],["impressao","Impressão"],["transfer","Transferência (calandra)"],["corte","Corte"],["costura","Costura"],["terceirizados","Terceirizados"],["serralheria","Serralheria"],["marcenaria","Marcenaria"],["aplique","Aplique"],["personalizados","Personalizados"],["expedicao","Expedição"]];
+const ANTIGOS={"desenvolvimento":"desenv","impressão":"impressao","impressao":"impressao","calandra":"transfer","transferência":"transfer","solda":"serralheria","acabamento":"serralheria","cnc router":"marcenaria","montagem":"marcenaria","display":"aplique","expedição":"expedicao"};
+const sb=window.supabase.createClient(window.ACL_CFG.url,window.ACL_CFG.key,{auth:{persistSession:false}});
+const $=id=>document.getElementById(id);
+const bruto=(new URLSearchParams(location.search).get("setor")||"").trim();
+const chave=(SETORES.find(([k])=>k===bruto.toLowerCase())||[])[0]||ANTIGOS[bruto.toLowerCase()]||((SETORES.find(([,n])=>n.toLowerCase()===bruto.toLowerCase())||[])[0]);
+const nomeSetor=chave?(SETORES.find(([k])=>k===chave)||[])[1]:"";
+if(!chave){$("setor-nome").textContent="Setor inválido";$("setor-info").textContent="Leia o QR do cartão do seu setor";$("btn-iniciar").disabled=true;$("f-manual").style.display="none"}
+else{const i=SETORES.findIndex(([k])=>k===chave);$("setor-nome").textContent=nomeSetor;$("setor-info").textContent=(i+1)+"º setor de "+SETORES.length;document.title="Leitor · "+nomeSetor}
+
+let stream=null,timer=null,ocupado=false,detector=null;
+if("BarcodeDetector" in window){try{detector=new BarcodeDetector({formats:["qr_code"]})}catch(e){}}
+async function iniciar(){
+  $("resultado").style.display="none";$("tela-iniciar").style.display="none";$("f-manual").style.display="none";$("tela-scanner").style.display="block";ocupado=false;
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false})}
+  catch(e){parar();$("tela-iniciar").style.display="block";mostra("erro","Erro ao acessar a câmera","Verifique a permissão de câmera do navegador e tente de novo. Você também pode digitar o número do pedido.");return}
+  const v=$("video");v.srcObject=stream;try{await v.play()}catch(e){}
+  const cv=document.createElement("canvas"),cx=cv.getContext("2d",{willReadFrequently:true});
+  const tick=async()=>{if(!stream||ocupado)return;let val=null;
+    if(v.readyState>=2&&v.videoWidth){
+      if(detector){try{const r=await detector.detect(v);if(r&&r[0])val=r[0].rawValue}catch(e){}}
+      if(!val&&window.jsQR){const w=Math.min(640,v.videoWidth),h=Math.round(v.videoHeight*w/v.videoWidth);cv.width=w;cv.height=h;cx.drawImage(v,0,0,w,h);const r=jsQR(cx.getImageData(0,0,w,h).data,w,h);if(r&&r.data)val=r.data}}
+    if(val){ocupado=true;try{navigator.vibrate&&navigator.vibrate(90)}catch(e){}parar();registrar(val);return}
+    timer=setTimeout(tick,200)};
+  tick()}
+function parar(){clearTimeout(timer);if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}$("tela-scanner").style.display="none";if(chave)$("f-manual").style.display="flex"}
+function mostra(tipo,titulo,texto,extra){const el=$("resultado");el.className="resultado "+tipo;el.style.display="block";
+  el.innerHTML="<h3>"+titulo+"</h3><p>"+texto+"</p>"+(extra||"")+'<button class="btn-novo" id="btn-prox">'+(tipo==="ok"?"Escanear próximo pedido":"Escanear novamente")+"</button>";
+  $("btn-prox").onclick=iniciar}
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+async function registrar(lido){
+  $("processando").style.display="block";$("tela-iniciar").style.display="none";
+  try{const{data,error}=await sb.rpc("registrar_leitura",{p_num:String(lido),p_setor:chave});$("processando").style.display="none";
+    if(error)throw error;
+    if(!data||data.erro){mostra("erro","Pedido não encontrado","O QR Code lido não corresponde a nenhum pedido do sistema.");return}
+    const urg=data.prioridade==="urgente";const pz=data.prazo?new Date(data.prazo+"T12:00:00").toLocaleDateString("pt-BR"):"—";
+    mostra("ok","Entrada registrada!","Pedido movido para "+esc(nomeSetor),
+      '<div class="info-grid"><div class="info-item"><div class="info-label">Pedido</div><div class="info-value">#'+esc(String(data.numero).padStart(6,"0"))+'</div></div>'+
+      '<div class="info-item"><div class="info-label">Setor</div><div class="info-value">'+esc(nomeSetor)+'</div></div>'+
+      '<div class="info-item"><div class="info-label">Cliente</div><div class="info-value">'+esc(data.cliente||"—")+'</div></div>'+
+      '<div class="info-item"><div class="info-label">Prazo</div><div class="info-value">'+pz+' <span class="badge '+(urg?"badge-urgente":"badge-normal")+'">'+(urg?"Urgente":"Normal")+'</span></div></div></div>')}
+  catch(e){$("processando").style.display="none";$("tela-iniciar").style.display="block";mostra("erro","Erro de conexão","Verifique a internet e tente de novo.")}}
+$("btn-iniciar").onclick=iniciar;$("btn-cancelar").onclick=()=>{parar();$("tela-iniciar").style.display="block"};
+$("f-manual").onsubmit=e=>{e.preventDefault();const v=$("num-manual").value.trim();if(!v)return;$("num-manual").value="";registrar(v)};
+})();
+</script>
+</body>
+</html>
