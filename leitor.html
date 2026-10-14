@@ -22,6 +22,9 @@ body{font-family:Arial,sans-serif;background:#0f0f14;min-height:100vh;color:#e8e
 .resultado{margin:12px 16px 16px;border-radius:10px;padding:18px;text-align:center;display:none}
 .resultado.ok{background:#0a2a0a;border:2px solid #2ecc8a}
 .resultado.erro{background:#2a0000;border:2px solid #e05050}
+.resultado.aviso{background:#2a1d00;border:2px solid #ef9f27}
+.resultado.aviso h3{color:#ef9f27}
+.resultado ul{text-align:left;margin:10px 0 0 18px;font-size:13px;color:#ddd;line-height:1.6}
 .resultado h3{font-size:18px;font-weight:bold;margin-bottom:8px}
 .resultado.ok h3{color:#2ecc8a}
 .resultado.erro h3{color:#e05050}
@@ -65,7 +68,7 @@ body{font-family:Arial,sans-serif;background:#0f0f14;min-height:100vh;color:#e8e
   <button class="btn-cancelar" id="btn-cancelar">Cancelar</button>
 </div>
 
-<div class="processando" id="processando"><div class="spinner"></div><div>Registrando pedido…</div></div>
+<div class="processando" id="processando"><div class="spinner"></div><div id="proc-txt">Registrando pedido…</div></div>
 <div class="resultado" id="resultado"></div>
 <form class="manual" id="f-manual" autocomplete="off"><input id="num-manual" inputmode="numeric" placeholder="ou digite o nº do pedido"><button type="submit">OK</button></form>
 <div class="rodape">Sistema ACL</div>
@@ -103,16 +106,25 @@ function mostra(tipo,titulo,texto,extra){const el=$("resultado");el.className="r
   $("btn-prox").onclick=iniciar}
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 async function registrar(lido){
-  $("processando").style.display="block";$("tela-iniciar").style.display="none";
-  try{const{data,error}=await sb.rpc("registrar_leitura",{p_num:String(lido),p_setor:chave});$("processando").style.display="none";
+  $("proc-txt").textContent="Registrando pedido…";$("processando").style.display="block";$("tela-iniciar").style.display="none";
+  try{const{data,error}=await sb.rpc("registrar_leitura",{p_num:String(lido),p_setor:chave});
     if(error)throw error;
-    if(!data||data.erro){mostra("erro","Pedido não encontrado","O QR Code lido não corresponde a nenhum pedido do sistema.");return}
+    const nped=d=>"#"+esc(String(d.numero).padStart(6,"0"))+(d.cliente?" · "+esc(d.cliente):"");
+    if(!data||data.erro){$("processando").style.display="none";
+      if(data&&data.erro==="nao_liberado"){mostra("aviso","Pedido ainda não liberado","Pedido "+nped(data)+" ainda não pode entrar na produção. Falta:<ul>"+(data.falta||[]).map(f=>"<li>"+esc(f)+"</li>").join("")+"</ul>",'<p style="margin-top:10px">Nada foi registrado. Avise o PCP.</p>');return}
+      if(data&&(data.erro==="cancelado"||data.erro==="enviado")){mostra("aviso",data.erro==="cancelado"?"Pedido cancelado":"Pedido já enviado","Pedido "+nped(data)+". Nada foi registrado.");return}
+      mostra("erro","Pedido não encontrado","O QR Code lido não corresponde a nenhum pedido do sistema.");return}
+    $("proc-txt").textContent="Conferindo no sistema…";let res=null;
+    if(data.id){for(let k=0;k<12;k++){await new Promise(r=>setTimeout(r,800));try{const r=await sb.rpc("leitura_resultado",{p_id:data.id});if(r.data&&r.data.resultado){res=r.data.resultado;break}}catch(_){}}}
+    $("processando").style.display="none";
     const urg=data.prioridade==="urgente";const pz=data.prazo?new Date(data.prazo+"T12:00:00").toLocaleDateString("pt-BR"):"—";
-    mostra("ok","Entrada registrada!","Pedido movido para "+esc(nomeSetor),
-      '<div class="info-grid"><div class="info-item"><div class="info-label">Pedido</div><div class="info-value">#'+esc(String(data.numero).padStart(6,"0"))+'</div></div>'+
+    const grade='<div class="info-grid"><div class="info-item"><div class="info-label">Pedido</div><div class="info-value">#'+esc(String(data.numero).padStart(6,"0"))+'</div></div>'+
       '<div class="info-item"><div class="info-label">Setor</div><div class="info-value">'+esc(nomeSetor)+'</div></div>'+
       '<div class="info-item"><div class="info-label">Cliente</div><div class="info-value">'+esc(data.cliente||"—")+'</div></div>'+
-      '<div class="info-item"><div class="info-label">Prazo</div><div class="info-value">'+pz+' <span class="badge '+(urg?"badge-urgente":"badge-normal")+'">'+(urg?"Urgente":"Normal")+'</span></div></div></div>')}
+      '<div class="info-item"><div class="info-label">Prazo</div><div class="info-value">'+pz+' <span class="badge '+(urg?"badge-urgente":"badge-normal")+'">'+(urg?"Urgente":"Normal")+'</span></div></div></div>';
+    if(!res){mostra("ok","Leitura recebida","O pedido vai aparecer em "+esc(nomeSetor)+" assim que o sistema estiver aberto no computador ou na TV.",grade);return}
+    if(/registrado em/i.test(res)&&!/já/i.test(res)){mostra("ok","Entrada registrada!","Pedido movido para "+esc(nomeSetor),grade);return}
+    mostra("aviso","Não entrou neste setor",esc(res.replace(/^sem mudança \((.*)\)$/,"Nada mudou: $1.")),grade)}
   catch(e){$("processando").style.display="none";$("tela-iniciar").style.display="block";mostra("erro","Erro de conexão","Verifique a internet e tente de novo.")}}
 $("btn-iniciar").onclick=()=>{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){mostra("erro","Este navegador não abre a câmera ao vivo","Use o botão <b>Tirar foto do QR</b> ou digite o número do pedido.");return}iniciar()};
 $("foto").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;$("resultado").style.display="none";$("processando").style.display="block";
