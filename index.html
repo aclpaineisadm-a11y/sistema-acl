@@ -943,9 +943,16 @@ const prontoExp=p=>liberado(p)&&(p.linhas||[]).length>0&&(p.linhas||[]).every(l=
 const atrasado=p=>p.status!=="enviado"&&p.status!=="cancelado"&&p.prazo&&p.prazo<today();
 function ultimoEvento(p){const t=trilha(p);return t.length?t[t.length-1].em:p.criadoEm}
 const parado=p=>p.status==="producao"&&(Date.now()-new Date(ultimoEvento(p)))>2*864e5;
+const PRE=["vendas","desenv","pcp"];
+function setorPre(p){let c="vendas",t0="";trilha(p).forEach(t=>{if(PRE.includes(t.s)&&t.a==="entrada"&&String(t.em)>=t0){c=t.s;t0=String(t.em)}});return c}
+function faltaPara(p,s){const f=[];const pag=!!(p.pagamento&&p.pagamento.ok);const arte=!p.arteNecessaria||!!(p.arte&&p.arte.ok);
+  if((s==="desenv"||s==="pcp")&&!pag)f.push("pagamento confirmado pelo Financeiro");if(s==="pcp"&&!arte)f.push("arte aprovada (Desenvolvimento)");return f}
+async function entradaPre(p,s){const nm=SET[s].nome;if(liberado(p))return"Pedido "+numFmt(p.numero)+" já foi liberado para a produção: nada registrado em "+nm+".";
+  if(setorPre(p)===s)return"Pedido "+numFmt(p.numero)+" já está em "+nm+".";const f=faltaPara(p,s);if(f.length)return"Pedido "+numFmt(p.numero)+" ainda não pode ir para "+nm+": falta "+f.join(" e ")+".";
+  await S.db.doc("pedidos/"+p.id).update({trilha:trilha(p).concat([{s,a:"entrada",em:new Date().toISOString(),por:S.uid||"",obs:"leitura"}]).slice(-120)});return"Pedido "+numFmt(p.numero)+" registrado em "+nm+"."}
 function locais(p){
   if(p.status==="cancelado")return[];if(p.status==="enviado")return[{col:"enviado"}];
-  if(!liberado(p)){if(p.arteNecessaria&&!(p.arte&&p.arte.ok))return[{col:"desenv"}];if(!(p.pagamento&&p.pagamento.ok))return[{col:"vendas"}];return[{col:"pcp"}]}
+  if(!liberado(p))return[{col:setorPre(p),pre:true}];
   const out=[];(p.linhas||[]).forEach(lid=>{const L=linhaBy(lid);const r=L.rota.filter(s=>!(p.pular||[]).includes(s));const prox=r.find(s=>estado(p,s).st!=="concluido");if(prox)out.push({col:prox,linha:lid,st:estado(p,prox).st})});
   if(!out.length)return[{col:"expedicao",st:estado(p,"expedicao").st}];
   if((p.linhas||[]).some(l=>linhaFeita(p,l)))out.push({col:"expedicao",parcial:true});
@@ -1055,11 +1062,16 @@ function drawBars(box,meses,vals){if(!vals.some(v=>v>0)){box.innerHTML=`<div cla
   svg.addEventListener("mouseleave",()=>tip.hidden=true)}
 
 /* ===== PRODUÇÃO ===== */
-function desdeSetor(p,col){const e=SET[col]&&SET[col].linha||col==="expedicao"?estado(p,col).em:null;const iso=e||(col==="pcp"&&p.arte&&p.arte.em)||p.criadoEm;if(!iso)return"";const h=Math.max(0,(Date.now()-new Date(iso))/36e5);return(h<24?Math.round(h)+" h":Math.floor(h/24)+(Math.floor(h/24)===1?" dia":" dias"))}
+function desdeSetor(p,col){const e=SET[col]&&SET[col].linha||col==="expedicao"||PRE.includes(col)?estado(p,col).em:null;const iso=e||(col==="pcp"&&p.arte&&p.arte.em)||p.criadoEm;if(!iso)return"";const h=Math.max(0,(Date.now()-new Date(iso))/36e5);return(h<24?Math.round(h)+" h":Math.floor(h/24)+(Math.floor(h/24)===1?" dia":" dias"))}
 function itensResumo(p,max,col){let its=p.itens||[];if(col&&SET[col]&&SET[col].linha){const f=its.filter(i=>linhaBy(i.linha).rota.includes(col));if(f.length)its=f}return its.slice(0,max).map(i=>nq(i.qtd)+"× "+i.desc+(i.acabamento?" · "+i.acabamento:"")).join("\n")+(its.length>max?"\n+ "+(its.length-max)+" item(ns)":"")}
 function cardDet(p,loc){const ds=desdeSetor(p,loc&&loc.col);return card(p,loc).replace(/<\/button>$/,`<div class="det"><div class="its">${esc(itensResumo(p,3,loc&&loc.col))}</div><div class="meta">${ds?`<span>neste setor há <b>${ds}</b></span>`:""}<span>vendedor: ${esc(vnome(vkey(p)))}</span>${p.entrega&&p.entrega.tipo?`<span>${esc(ENTREGAS[p.entrega.tipo]||"")}</span>`:""}</div></div></button>`)}
 function card(p,loc){const lin=loc&&loc.linha?linhaBy(loc.linha).nome:"";const st=loc&&loc.st;
-  return `<button type="button" class="card ${atrasado(p)?"late":""} ${p.prioridade==="urgente"?"urg":""}" data-ped="${p.id}"><div class="r1"><span class="ped">${esc(numFmt(p.numero))}</span><span class="small ${atrasado(p)?"neg":"muted"} num">${p.prazo?"prazo "+fd(p.prazo):""}</span></div><div class="cli">${esc(p.cliente||"")}</div><div class="r3">${lin?`<span class="lt">${esc(lin)}</span>`:""}${st==="andamento"?'<span class="pill run">em produção</span>':st==="externo"?'<span class="pill warn">no terceirizado</span>':loc&&loc.parcial?'<span class="pill warn">aguardando outra linha</span>':""}${parado(p)?'<span class="pill bad">parado</span>':""}${p.prioridade==="urgente"?'<span class="pill warn">urgente</span>':""}</div></button>`}
+  return `<button type="button" class="card ${atrasado(p)?"late":""} ${p.prioridade==="urgente"?"urg":""}" data-ped="${p.id}"><div class="r1"><span class="ped">${esc(numFmt(p.numero))}</span><span class="small ${atrasado(p)?"neg":"muted"} num">${p.prazo?"prazo "+fd(p.prazo):""}</span></div><div class="cli">${esc(p.cliente||"")}</div><div class="r3">${lin?`<span class="lt">${esc(lin)}</span>`:""}${st==="andamento"?'<span class="pill run">em produção</span>':st==="externo"?'<span class="pill warn">no terceirizado</span>':loc&&loc.parcial?'<span class="pill warn">aguardando outra linha</span>':""}${loc&&loc.pre?pendPills(p,loc.col):""}${parado(p)?'<span class="pill bad">parado</span>':""}${p.prioridade==="urgente"?'<span class="pill warn">urgente</span>':""}</div></button>`}
+function pendPills(p,col){const L=liberacao(p);const g=k=>(L.find(x=>x.k===k)||{}).ok;const out=[];
+  if(!g("pagamento"))out.push('<span class="pill warn">aguardando pagamento</span>');
+  if(col!=="vendas"&&!g("arte"))out.push('<span class="pill warn">arte pendente</span>');
+  if(col==="pcp"){if(!g("material"))out.push('<span class="pill warn">material</span>');if(g("pagamento")&&g("arte")&&g("material"))out.push('<span class="pill ok">pronto p/ liberar</span>')}
+  return out.join("")}
 function renderQuadro(){
   const ativos=S.ped.filter(p=>p.status!=="cancelado"&&!(p.status==="enviado"&&String(p.enviadoEm||"").slice(0,10)<addDays(today(),-2)));
   const QLk=qLin();const naArea0=p=>!QLk||(p.linhas||[]).some(l=>QLk.includes(l));const naArea=p=>(!QLk||(p.linhas||[]).some(l=>QLk.includes(l)))&&(!S.qSetor||locais(p).some(l=>l.col===S.qSetor)||(S.qSetor==="expedicao"&&p.status==="enviado"));
@@ -1081,7 +1093,7 @@ function renderQuadro(){
   renderSaiHoje(naArea0);
   $("#q-linhas").innerHTML=[{id:"",nome:"Todas"}].concat(Object.entries(AREAS).map(([id,a])=>({id,nome:a.nome}))).concat(LINHAS).map(l=>`<button class="chip" data-ql="${l.id}" aria-pressed="${S.qLinha===l.id}">${esc(l.nome)}</button>`).join("");
   const q=norm($("#q-q").value);
-  const cols=[["vendas","Vendas · aguardando pagamento"],["desenv","Desenvolvimento (arte)"],["pcp","PCP · aguardando liberação"]].concat([...new Set(LINHAS.flatMap(L=>L.rota))].map(s=>[s,SET[s].nome])).concat([["expedicao","Expedição"]]);
+  const cols=[["vendas","Vendas"],["desenv","Desenvolvimento"],["pcp","PCP"]].concat([...new Set(LINHAS.flatMap(L=>L.rota))].map(s=>[s,SET[s].nome])).concat([["expedicao","Expedição"]]);
   const buckets={};cols.forEach(([c])=>buckets[c]=[]);
   ativos.forEach(p=>{if(q&&!norm(p.numero+" "+p.cliente).includes(q))return;if(!passaFiltro(p))return;const QL=qLin();if(QL&&!(p.linhas||[]).some(l=>QL.includes(l)))return;locais(p).forEach(loc=>{if(QL&&loc.linha&&!QL.includes(loc.linha))return;(buckets[loc.col]||[]).push({p,loc})})});
   const ord=(a,b)=>(atrasado(b.p)-atrasado(a.p))||((b.p.prioridade==="urgente")-(a.p.prioridade==="urgente"))||String(a.p.prazo||"9").localeCompare(String(b.p.prazo||"9"));
@@ -1154,10 +1166,11 @@ const SETOR_LEITOR={vendas:"vendas",desenvolvimento:"desenv",desenv:"desenv",pcp
 window.ACL.processarLeitura=async(num,setor)=>{const raw=norm(setor).trim();const s=SETOR_LEITOR[raw]||(SET[raw]?raw:null);if(!s)return"setor desconhecido: "+setor;const p=findPed(num);if(!p)return"pedido não encontrado";
   if(p.status==="cancelado")return"pedido cancelado";if(p.status==="enviado")return"pedido já enviado";
   if(SET[s].linha||s==="expedicao"){const m=await leituraAuto(p,s,true);if(raw==="terceirizados"){const q=S.ped.find(x=>x.id===p.id)||p;if(estado(q,"costura").st!=="externo")await S.db.doc("pedidos/"+p.id).update({trilha:trilha(q).concat([{s:"costura",a:"externo",em:new Date().toISOString(),por:S.uid||"",obs:"leitura: terceirizados"}]).slice(-120)})}return m||"sem mudança (pedido não liberado, fora da rota ou incompleto)"}
+  if(PRE.includes(s))return await entradaPre(p,s);
   if(estado(p,s).st!=="pendente")return"já registrado em "+SET[s].nome;await S.db.doc("pedidos/"+p.id).update({trilha:trilha(p).concat([{s,a:"entrada",em:new Date().toISOString(),por:S.uid||"",obs:"leitura"}]).slice(-120)});return"registrado em "+SET[s].nome};
 function setorDoCodigo(v){const m=String(v||"").trim().match(/^SETOR[-:\s]*([a-z_]+)$/i);const k=m&&m[1].toLowerCase();return k&&SET[k]?k:null}
 function trocarSetor(k){S.setor=k;$("#st-setor").value=k;try{localStorage.setItem("acl-prod-setor",k)}catch(x){}S.atual=null;renderEstacao();$("#st-msg").textContent="Este aparelho agora está em: "+SET[k].nome+". Leia o QR do pedido.";toast("Setor: "+SET[k].nome)}
-async function leituraAuto(p,s,force){const c=$("#st-auto");if(!s||(!force&&c&&!c.checked))return"";if(p.status==="cancelado"||p.status==="enviado"||!liberado(p))return"";
+async function leituraAuto(p,s,force){const c=$("#st-auto");if(!s||(!force&&c&&!c.checked))return"";if(PRE.includes(s)&&p.status!=="cancelado"&&p.status!=="enviado")return await entradaPre(p,s);if(p.status==="cancelado"||p.status==="enviado"||!liberado(p))return"";
   const r=rotaDe(p);const now=new Date().toISOString();const ent=[];const add=(x,a,o)=>ent.push({s:x,a,em:now,por:S.uid||"",obs:o||""});
   if(s==="expedicao"){if(estado(p,"expedicao").st!=="pendente")return"";(p.linhas||[]).forEach(lid=>linhaBy(lid).rota.filter(x=>r.includes(x)).forEach(x=>{const e=estado(p,x).st;if(e==="andamento"||e==="externo")add(x,"saida","saída automática: pedido lido na Expedição")}));
     if(!prontoExp(Object.assign({},p,{trilha:trilha(p).concat(ent)})))return"Pedido "+numFmt(p.numero)+" ainda não está completo: nada foi registrado na Expedição.";add("expedicao","entrada","leitura")}
@@ -1176,7 +1189,7 @@ async function abrirCam(){if(camStream)return;if(!navigator.mediaDevices||!navig
 function fecharCam(){clearTimeout(camT);if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}const b=$("#st-cam");if(b)b.hidden=true}
 $("#st-cam-btn").addEventListener("click",abrirCam);$("#st-cam-x").addEventListener("click",fecharCam);
 document.addEventListener("click",e=>{if(camStream&&e.target.closest("[data-view],[data-setor]"))fecharCam()});document.addEventListener("visibilitychange",()=>{if(document.hidden)fecharCam()});
-function qrSetoresHtml(){const ks=Object.keys(SET).filter(k=>!["vendas","financeiro","desenv","pcp"].includes(k));
+function qrSetoresHtml(){const ks=Object.keys(SET).filter(k=>!["vendas","financeiro"].includes(k));
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>QR dos setores</title><style>@page{size:A4;margin:16mm}body{font-family:Arial,Helvetica,sans-serif;margin:0;color:#000}.pg{page-break-after:always;display:flex;flex-direction:column;align-items:center;text-align:center;gap:8mm;padding-top:10mm}.pg:last-child{page-break-after:auto}.l{font-size:12pt;letter-spacing:2px;text-transform:uppercase;color:#444}.n{font-size:40pt;font-weight:700}.q{width:150mm;height:150mm}.q svg{width:100%;height:100%}.t{font-size:13pt;max-width:150mm}</style></head><body>${ks.map(k=>`<div class="pg"><div class="l">Setor</div><div class="n">${esc(SET[k].nome)}</div><div class="q">${qrSvg(window.ACL_CFG&&window.ACL_CFG.leitorUrl?window.ACL_CFG.leitorUrl+"?setor="+k:"SETOR-"+k)}</div><div class="t">${window.ACL_CFG&&window.ACL_CFG.leitorUrl?"Aponte a câmera do celular para este QR, toque em Abrir câmera e escanear e leia o QR do pedido.":"Leia este QR no sistema (Produção → Leitura) para colocar o aparelho neste setor. Depois leia o QR do pedido."}</div></div>`).join("")}</body></html>`}
 $("#st-foto").addEventListener("change",async e=>{const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;$("#st-msg").textContent="Lendo o QR…";const c=await decodePhoto(f).catch(()=>null);if(!c){$("#st-msg").textContent="Não encontrei QR na foto. Aproxime e tente de novo, ou digite o nº.";return}$("#st-q").value=c;$("#st-form").requestSubmit()});
 async function decodePhoto(file){const url=URL.createObjectURL(file);try{const img=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=url});
