@@ -65,7 +65,7 @@ function botaoSair(){const b=document.createElement("button");b.id="acl-sair";b.
 
 /* ---------- banco: coleções em cache, atualizadas em tempo real ---------- */
 const COL={};let canal=null;
-function emit(st){if(st.pend)return;st.pend=true;queueMicrotask(()=>{st.pend=false;st.subs.forEach(f=>{try{f()}catch(e){console.error(e)}})})}
+function emit(st){if(st.pend)return;st.pend=true;setTimeout(()=>{st.pend=false;st.subs.forEach(f=>{try{f()}catch(e){console.error(e)}})},40)}
 function garanteCanal(){if(canal)return;canal=sb.channel("docs-todos").on("postgres_changes",{event:"*",schema:"public",table:"docs"},pl=>{
     if(pl.eventType==="DELETE"){const p=pl.old&&pl.old.path;if(!p)return;const{col,id}=split(p);const st=COL[col];if(st&&st.map.delete(id))emit(st)}
     else{const r=pl.new;const st=COL[r.col];if(st){st.map.set(r.id,r.data);emit(st)}}}).subscribe()}
