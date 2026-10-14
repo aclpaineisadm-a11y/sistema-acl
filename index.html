@@ -1623,10 +1623,11 @@ function renderGestProd(){const box=$("#gp-tbl");if(!box)return;
   const L=listaProdutos(box,true);$("#gp-n").textContent=L.length+" produto(s)"}
 function renderCat(){const box=$("#k-tbl");if(!box)return;listaProdutos(box,false)}
 function dlOpts(campo){return [...new Set(S.prod.map(p=>p[campo]).filter(Boolean))].sort().map(v=>`<option value="${esc(v)}">`).join("")}
-function prodForm(id){if(!S.isAdmin)return toast("Só o gestor cadastra e altera produtos.",true);
-  const p=id?prodBy(id):{codigo:nextProdCod(),unidade:"UN",categoriaFiscal:"04",linha:"confeccao",prazoDias:7,ativo:true,arte:true,precos:[0,0,0,0],comissaoTipo:"%",composicao:[],imagens:[]};
+function prodForm(id,copiaDe){if(!S.isAdmin)return toast("Só o gestor cadastra e altera produtos.",true);
+  const src=!id&&copiaDe?prodBy(copiaDe):null;
+  const p=id?prodBy(id):src?Object.assign(JSON.parse(JSON.stringify(src)),{id:undefined,codigo:nextProdCod(),nome:src.nome+" (cópia)",ean:"",criadoEm:undefined,por:undefined}):{codigo:nextProdCod(),unidade:"UN",categoriaFiscal:"04",linha:"confeccao",prazoDias:7,ativo:true,arte:true,precos:[0,0,0,0],comissaoTipo:"%",composicao:[],imagens:[]};
   const tn=tabNomes();let imgs=(p.imagens||[]).slice();
-  openModal(`<div class="panel-h"><h3>${id?"Produto "+esc(p.codigo):"Novo produto"}</h3><span class="small muted">${id&&p.criadoEm?"cadastrado em "+fdy(String(p.criadoEm).slice(0,10)):"data de cadastro "+fdy(today())}</span></div>
+  openModal(`<div class="panel-h"><h3>${id?"Produto "+esc(p.codigo):src?"Novo produto (cópia de "+esc(src.codigo)+")":"Novo produto"}</h3><span class="small muted">${id&&p.criadoEm?"cadastrado em "+fdy(String(p.criadoEm).slice(0,10)):"data de cadastro "+fdy(today())}</span></div>
   <form id="f-k" autocomplete="off">
     <fieldset class="sec"><legend>Dados principais</legend>
       <div class="grid2"><label class="f">Id<input id="fk-cod" class="num" value="${esc(p.codigo)}" ${id?"disabled":""}></label><label class="f">Cód. fornecedor<input id="fk-cf" value="${esc(p.codFornecedor||"")}"></label><label class="f">Referência<input id="fk-ref" value="${esc(p.ref||"")}"></label><label class="f">Cód. barras<input id="fk-ean" value="${esc(p.ean||"")}" inputmode="numeric"></label></div>
@@ -1661,8 +1662,10 @@ function prodForm(id){if(!S.isAdmin)return toast("Só o gestor cadastra e altera
     <div data-pane="comp" class="sec" style="border-style:dashed" hidden><div class="small muted">Insumos do Almoxarifado que entram em <b>uma unidade</b> do produto (no produto vendido por medida, <b>não coloque o tecido</b>: ele é escolhido no pedido e o consumo é calculado pela medida de corte). Com isso o PCP vê na hora se há material para o pedido, o estoque baixa sozinho na liberação e o pedido mostra o custo de material e a margem.</div>
       <div class="tbl-wrap"><table class="pc"><thead><tr><th>Insumo</th><th>Qtd</th><th>Un.</th><th></th></tr></thead><tbody id="fk-comp">${(p.composicao||[]).map(compRow).join("")}</tbody></table></div><button type="button" class="btn sm" id="fk-cadd" style="align-self:flex-start">+ Insumo</button></div>
     <div data-pane="obs" class="sec" style="border-style:dashed" hidden><label class="f">Observação<textarea id="fk-obs" rows="5">${esc(p.obs||"")}</textarea></label></div>
-    <div class="foot"><button type="button" class="btn" data-act="close">Fechar</button><button class="btn primary" type="submit">Salvar (F3)</button></div>
+    ${src?`<div class="small" style="color:var(--warn,#b45309)">Cópia de <b>${esc(src.codigo)} · ${esc(src.nome)}</b>. Troque a descrição e o que mudar e clique em Salvar; o original não é alterado.</div>`:""}
+    <div class="foot"><button type="button" class="btn" data-act="close">Fechar</button>${id?`<button type="button" class="btn" id="fk-dup" title="Cria um produto novo com os mesmos dados">Duplicar produto</button>`:""}<button class="btn primary" type="submit">Salvar (F3)</button></div>
   </form><datalist id="dl-ins2">${S.ins.filter(i=>i.ativo!==false).map(i=>`<option value="${esc(insLabel(i))}">`).join("")}</datalist><datalist id="dl-grp">${dlOpts("grupo")}</datalist><datalist id="dl-sgrp">${dlOpts("subgrupo")}</datalist><datalist id="dl-marca">${dlOpts("marca")}</datalist>`);
+  if($("#fk-dup"))$("#fk-dup").addEventListener("click",()=>{closeModal();setTimeout(()=>{prodForm(null,id);setTimeout(()=>{const n=$("#fk-nome");if(n){n.focus();n.select()}},120)},0)});
   $("#fk-tabs").addEventListener("click",e=>{const b=e.target.closest("[data-t]");if(!b)return;$("#fk-tabs").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));document.querySelectorAll("#f-k [data-pane]").forEach(d=>d.hidden=d.dataset.pane!==b.dataset.t)});
   const mg=()=>{const cu=parseFloat($("#fk-custo").value);const ps=[...document.querySelectorAll(".fk-pr")].map(x=>parseFloat(x.value)||0);$("#fk-mg").innerHTML=cu?ps.map((v,i)=>v?`${esc(tn[i].split(" · ")[0])}: margem <b class="${(v-cu)/v<.2?"neg":""}">${pct((v-cu)/v)}</b> (${brl.format(v-cu)})`:"").filter(Boolean).join(" · "):""};
   const mv=()=>{const on=$("#fk-med").checked;const f=$("#fk-forma").value;const F=FORMAS_MED[f];document.querySelectorAll("#f-k .medcfg").forEach(x=>x.hidden=!on);if(!on)return;$("#fk-slw").hidden=!F.sobra;$("#fk-saw").hidden=F.sobra!==2;$("#fk-fbw").hidden=!F.babado;
