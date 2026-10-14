@@ -586,7 +586,7 @@ body.tv .meta .bigv{font-size:4rem}
   </section>
 
   <section class="view" id="v-cli" hidden>
-    <div class="view-head"><div class="grow"><h2>Clientes</h2><p>Quem compra, quanto e quando foi a última vez. Clientes sem comprar há mais de 90 dias aparecem em destaque para o Vendas reativar.</p></div><button class="btn primary w" data-act="new-cli">+ Novo cliente</button></div>
+    <div class="view-head"><div class="grow"><h2>Clientes</h2><p>Quem compra, quanto e quando foi a última vez. Clientes sem comprar há mais de 90 dias aparecem em destaque para o Vendas reativar.</p></div><button class="btn" data-act="imp-cli">Importar do JOB</button><button class="btn primary w" data-act="new-cli">+ Novo cliente</button></div>
     <div class="row flt"><input id="c-q" class="search" type="search" placeholder="Buscar nome, cidade ou telefone"><div class="chips" id="c-st"></div></div>
     <div class="panel"><div class="tbl-wrap" id="c-tbl"></div></div>
   </section>
@@ -1009,14 +1009,15 @@ function renderOrc(){
 }
 function renderCli(){
   const st=statsCli();const lim=addDays(today(),-90);
-  const tests={todos:()=>true,decorador:c=>c.tipo==="decorador",corporativo:c=>c.tipo==="corporativo",consumidor:c=>c.tipo==="consumidor",sumidos:c=>st[c.id]&&st[c.id].ult<lim};
+  const tests={todos:()=>true,decorador:c=>c.tipo==="decorador",corporativo:c=>c.tipo==="corporativo",consumidor:c=>c.tipo==="consumidor",sumidos:c=>{const u=(st[c.id]&&st[c.id].ult)||c.ultCompraJob;return!!u&&u<lim}};
   const lab={todos:"Todos",decorador:"Decoradores",corporativo:"Corporativos",consumidor:"Consumidor final",sumidos:"Sem comprar há 90 dias"};
   $("#c-st").innerHTML=Object.keys(tests).map(k=>`<button class="chip" data-cst="${k}" aria-pressed="${S.cSt===k}">${lab[k]}<span class="n">${S.cli.filter(tests[k]).length}</span></button>`).join("");
   const q=norm($("#c-q").value);
   const list=S.cli.filter(tests[S.cSt]).filter(c=>!q||norm([c.nome,c.cidade,c.telefone,c.documento].join(" ")).includes(q)).sort((a,b)=>((st[b.id]||{}).tot||0)-((st[a.id]||{}).tot||0)||a.nome.localeCompare(b.nome));
   if(!S.cli.length){$("#c-tbl").innerHTML=`<div class="empty"><b>Nenhum cliente cadastrado</b>Clientes também são criados automaticamente ao fazer um orçamento com um nome novo.<div class="w" style="margin-top:12px"><button class="btn primary" data-act="new-cli">+ Novo cliente</button></div></div>`;return}
   if(!list.length){$("#c-tbl").innerHTML=`<div class="empty"><b>Nada neste filtro</b></div>`;return}
-  $("#c-tbl").innerHTML=`<table><thead><tr><th>Cliente</th><th>Tipo</th><th>Cidade</th><th class="r">Pedidos</th><th class="r">Total comprado</th><th>Última compra</th></tr></thead><tbody>${list.map(c=>{const s=st[c.id]||{n:0,tot:0,ult:""};return `<tr class="click" data-cli="${c.id}"><td><b>${esc(c.nome)}</b><div class="small muted num" style="user-select:all">${esc(c.telefone||"")}</div></td><td class="small">${esc(TIPOS[c.tipo]||"")}</td><td class="small muted">${esc(c.cidade||"")}</td><td class="r num">${s.n}</td><td class="r num">${brl.format(s.tot)}</td><td>${s.ult?fdy(s.ult)+(s.ult<lim?' <span class="pill bad">sumido</span>':""):'<span class="small muted">nunca comprou</span>'}</td></tr>`}).join("")}</tbody></table>`;
+  const LIM_CLI=200;const tot=list.length;
+  $("#c-tbl").innerHTML=`<table><thead><tr><th>Cliente</th><th>Tipo</th><th>Cidade</th><th class="r">Pedidos</th><th class="r">Total comprado</th><th>Última compra</th></tr></thead><tbody>${list.slice(0,LIM_CLI).map(c=>{const s0=st[c.id]||{n:0,tot:0,ult:""};const s=Object.assign({},s0,{ult:s0.ult||c.ultCompraJob||""});return `<tr class="click" data-cli="${c.id}"><td><b>${esc(c.nome)}</b><div class="small muted num" style="user-select:all">${esc(c.telefone||"")}</div></td><td class="small">${esc(TIPOS[c.tipo]||"")}</td><td class="small muted">${esc(c.cidade||"")}</td><td class="r num">${s.n}</td><td class="r num">${brl.format(s.tot)}</td><td>${s.ult?fdy(s.ult)+(s.ult<lim?' <span class="pill bad">sumido</span>':""):'<span class="small muted">nunca comprou</span>'}</td></tr>`}).join("")}</tbody></table>${tot>LIM_CLI?`<div class="small muted" style="padding:10px 12px">Mostrando ${LIM_CLI} de ${tot.toLocaleString("pt-BR")} clientes. Use a busca acima (nome, cidade, telefone ou CPF/CNPJ) para encontrar os outros.</div>`:""}`;
 }
 function hbars(box,rows,fmt){if(!rows.length){box.innerHTML=`<div class="empty">Sem vendas no período.</div>`;return}const mx=Math.max(...rows.map(r=>r.v),1);
   box.innerHTML=rows.map(r=>`<div class="hb" title="${esc(r.l)}: ${esc((fmt||brl.format)(r.v))}${r.extra?" · "+esc(r.extra):""}"><span class="small lab">${esc(r.l)}</span><div class="track"><div class="bar" style="width:${Math.max(.5,r.v/mx*100)}%"></div></div><span class="num small" style="text-align:right">${esc((fmt||brk)(r.v))}</span></div>`).join("")}
@@ -1572,7 +1573,7 @@ function cliForm(id){const c=id?cliBy(id):{tipo:"decorador"};const st=id&&statsC
     <label class="f">Celular / WhatsApp<input id="fc-cel" value="${esc(c.celular||"")}" inputmode="tel"></label>
     <label class="f">E-mail<input id="fc-mail" value="${esc(c.email||"")}" inputmode="email"></label>
     <label class="f">Origem<select id="fc-ori">${ORIGENS.map(o=>`<option ${o===c.origem?"selected":""}>${esc(o)}</option>`).join("")}</select></label>
-    <label class="f">CEP<input id="fc-cep" value="${esc(c.cep||"")}" inputmode="numeric"></label>
+    <label class="f">CEP<input id="fc-cep" value="${esc(c.cep||"")}" inputmode="numeric" placeholder="preenche cidade e rua"></label>
     <label class="f" style="grid-column:span 2">Rua<input id="fc-rua" value="${esc(c.rua||(!c.rua&&c.endereco)||"")}"></label>
     <label class="f">Número<input id="fc-num" value="${esc(c.numero||"")}"></label>
     <label class="f">Bairro<input id="fc-bai" value="${esc(c.bairro||"")}"></label>
@@ -1581,10 +1582,43 @@ function cliForm(id){const c=id?cliBy(id):{tipo:"decorador"};const st=id&&statsC
     <label class="f">Observações<textarea id="fc-obs">${esc(c.obs||"")}</textarea></label>
     ${ps.length?`<div class="box"><span class="eyebrow">Pedidos</span><div class="tbl-wrap"><table><tbody>${ps.slice(0,15).map(p=>`<tr><td class="ped">${esc(numFmt(p.numero))}</td><td class="num">${fdy(dataVenda(p))}</td><td class="small">${(p.itens||[]).map(i=>esc(i.desc)).join(", ").slice(0,80)}</td><td class="r num">${brl.format(totalDe(p))}</td><td>${statusPill(p)}</td></tr>`).join("")}</tbody></table></div></div>`:""}
     <div class="foot">${id&&!back?`<button type="button" class="btn left w" data-act="orc-cli" data-id="${id}">+ Pedido para este cliente</button>`:""}<button type="button" class="btn" data-act="close">Fechar</button><button class="btn primary w" type="submit">Salvar</button></div></form>`);
-  $("#f-c").addEventListener("submit",async e=>{e.preventDefault();const g=s=>$(s).value.trim();const d={nome:g("#fc-nome"),fantasia:g("#fc-fant"),tipo:g("#fc-tipo"),documento:g("#fc-doc"),rgie:g("#fc-rgie"),telefone:g("#fc-tel"),celular:g("#fc-cel"),email:g("#fc-mail"),origem:g("#fc-ori"),cep:g("#fc-cep"),rua:g("#fc-rua"),numero:g("#fc-num"),bairro:g("#fc-bai"),cidade:g("#fc-cid"),uf:g("#fc-uf").toUpperCase(),obs:g("#fc-obs")};
+  $("#fc-cep").addEventListener("change",async e=>{const r=await buscaCep(e.target.value);if(!r)return toast("CEP não encontrado. Confira o número.",true);e.target.value=r.cep;e.target.dataset.ibge=r.ibge;const put=(k,v,force)=>{const x=$(k);if(v&&(force||!x.value.trim()))x.value=v};put("#fc-cid",r.cidade,true);put("#fc-uf",r.uf,true);put("#fc-rua",r.rua);put("#fc-bai",r.bairro);if(r.rua&&!$("#fc-num").value.trim())$("#fc-num").focus()});
+  $("#f-c").addEventListener("submit",async e=>{e.preventDefault();const g=s=>$(s).value.trim();const d={nome:g("#fc-nome"),fantasia:g("#fc-fant"),tipo:g("#fc-tipo"),documento:g("#fc-doc"),rgie:g("#fc-rgie"),telefone:g("#fc-tel"),celular:g("#fc-cel"),email:g("#fc-mail"),origem:g("#fc-ori"),cep:g("#fc-cep"),rua:g("#fc-rua"),numero:g("#fc-num"),bairro:g("#fc-bai"),cidade:g("#fc-cid"),uf:g("#fc-uf").toUpperCase(),obs:g("#fc-obs")};const ib=$("#fc-cep").dataset.ibge;if(ib){d.ibge=ib;d.cidadeConferir=false}
     if(!d.nome)return;if(!id&&S.cli.some(x=>norm(x.nome)===norm(d.nome)))return toast("Já existe um cliente com esse nome.",true);
     try{if(id){if(!c.codigo)d.codigo=nextCliCod();await S.db.doc("clientes/"+id).update(d)}else{d.codigo=nextCliCod();d.criadoEm=new Date().toISOString();d.por=S.uid||"";await S.db.collection("clientes").add(d)}toast("Cliente salvo");closeModal();const nb=document.querySelector("#fv-clibox");if(nb){nb.dataset.cid="";const inp=document.querySelector("#fv-cli");if(inp)inp.dispatchEvent(new Event("input"))}}catch(err){toast(errMsg(err),true)}});
 }
+/* ---------- CEP e importação de clientes do JOB ---------- */
+async function buscaCep(cep){const d=String(cep||"").replace(/\D/g,"");if(d.length!==8)return null;
+  try{const j=await fetch("https://viacep.com.br/ws/"+d+"/json/").then(r=>{if(!r.ok)throw 0;return r.json()});if(j&&!j.erro)return{cep:d.slice(0,5)+"-"+d.slice(5),cidade:j.localidade,uf:j.uf,ibge:j.ibge,rua:j.logradouro,bairro:j.bairro}}catch(e){}
+  try{const j=await fetch("https://brasilapi.com.br/api/cep/v2/"+d).then(r=>{if(!r.ok)throw 0;return r.json()});if(j&&j.city)return{cep:d.slice(0,5)+"-"+d.slice(5),cidade:j.city,uf:j.state,ibge:"",rua:j.street||"",bairro:j.neighborhood||""}}catch(e){}
+  return null}
+const fmtDoc=d=>{d=String(d||"").replace(/\D/g,"");return d.length===11?d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,"$1.$2.$3-$4"):d.length===14?d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,"$1.$2.$3/$4-$5"):d};
+function impCliForm(){if(!S.isAdmin)return toast("Só o gestor importa clientes.",true);let dados=null,rodando=false;
+  openModal(`<div class="panel-h"><h3>Importar clientes do JOB</h3></div><div class="panel-b" style="display:flex;flex-direction:column;gap:12px">
+    <div class="small muted">Escolha o arquivo <b>clientes-importar.json</b> que o Claude preparou a partir do relatório do JOB. Os clientes entram com o mesmo código do JOB. Quem já existe aqui com o mesmo código não é alterado. Durante a importação a cidade de cada cliente é conferida pelo CEP (os Correios), porque no relatório do JOB muitas cidades estavam erradas.</div>
+    <label class="btn" style="cursor:pointer;align-self:flex-start">Escolher arquivo<input type="file" id="ic-f" accept=".json,application/json" hidden></label>
+    <div id="ic-res"></div><div id="ic-prog" class="small"></div>
+    <div class="foot"><button type="button" class="btn" data-act="close" id="ic-close">Fechar</button><button type="button" class="btn primary" id="ic-go" disabled>Importar</button></div></div>`);
+  $("#ic-f").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(!j||j.fonte!=="JOB"||!Array.isArray(j.rows))throw 0;dados=j}catch(err){dados=null;$("#ic-res").innerHTML=`<div class="gate bad">Este não é o arquivo de importação de clientes.</div>`;$("#ic-go").disabled=true;return}
+    const tem=new Set(S.cli.map(c=>String(c.codigo||"")));const C=dados.cols;const ix=k=>C.indexOf(k);const novos=dados.rows.filter(r=>!tem.has(r[ix("jobId")]));dados.novos=novos;
+    $("#ic-res").innerHTML=`<div class="gate ${novos.length?"ok":"warn"}"><b>${dados.rows.length.toLocaleString("pt-BR")}</b> clientes no arquivo · <b>${novos.length.toLocaleString("pt-BR")}</b> novos para importar${dados.rows.length-novos.length?` · ${(dados.rows.length-novos.length).toLocaleString("pt-BR")} já existem e ficam como estão`:""}</div>`;$("#ic-go").disabled=!novos.length});
+  $("#ic-go").addEventListener("click",async()=>{if(rodando||!dados)return;rodando=true;$("#ic-go").disabled=true;$("#ic-close").disabled=true;const P=$("#ic-prog");const C=dados.cols;const ix=k=>C.indexOf(k);const rows=dados.novos;
+    let cache={};try{cache=JSON.parse(localStorage.getItem("acl-cep")||"{}")}catch(e){}
+    const ceps=[...new Set(rows.map(r=>String(r[ix("cep")]).replace(/\D/g,"")).filter(c=>c.length===8&&!(c in cache)))];let feitos=0;
+    const salvaCache=()=>{try{localStorage.setItem("acl-cep",JSON.stringify(cache))}catch(e){}};
+    const worker=async()=>{while(ceps.length){const c=ceps.shift();const r=await buscaCep(c);cache[c]=r?{c:r.cidade,u:r.uf,i:r.ibge}:null;feitos++;if(feitos%25===0){salvaCache();P.innerHTML=`<b>1 de 2 · Conferindo cidades pelo CEP:</b> ${feitos.toLocaleString("pt-BR")} de ${(feitos+ceps.length).toLocaleString("pt-BR")}. Não feche esta janela.`}}};
+    P.innerHTML=`<b>1 de 2 · Conferindo cidades pelo CEP…</b> Não feche esta janela.`;await Promise.all(Array.from({length:6},worker));salvaCache();
+    let corr=0,semCep=0;const agora=new Date().toISOString();
+    const docs=rows.map(r=>{const g=k=>r[ix(k)]||"";const cep=String(g("cep")).replace(/\D/g,"");const k=cache[cep];let cidade=g("cidade"),uf=g("uf"),ibge="",conf=false;
+      if(k){if(norm(k.c)!==norm(cidade)||k.u!==uf)corr++;cidade=k.c;uf=k.u;ibge=k.i||""}else{conf=true;semCep++}
+      const mails=String(g("emails")).split(";").filter(Boolean);
+      return{id:"job-"+g("jobId"),data:{codigo:g("jobId"),nome:g("nome"),pessoa:g("pessoa"),documento:fmtDoc(g("doc")),rgie:"",telefone:g("fone")||g("cel"),celular:g("cel"),email:mails[0]||"",cep:cep?cep.slice(0,5)+"-"+cep.slice(5):"",rua:g("rua"),numero:g("numero"),bairro:g("bairro"),cidade,uf,ibge,cidadeConferir:conf,nascimento:g("nasc"),ultCompraJob:g("ult"),tipo:"",origem:"",obs:mails.length>1?"Outros e-mails: "+mails.slice(1).join(", "):"",importadoDe:"JOB",criadoEm:g("cad")?g("cad")+"T12:00:00.000Z":agora,por:S.uid||""}}});
+    let ok=0;try{if(window.SB){const{data:ss}=await window.SB.auth.getSession();const uid=ss&&ss.session&&ss.session.user.id;
+        for(let i=0;i<docs.length;i+=400){const lote=docs.slice(i,i+400).map(d=>({path:"clientes/"+d.id,col:"clientes",id:d.id,data:d.data,updated_at:agora,updated_by:uid}));const{error}=await window.SB.from("docs").upsert(lote);if(error)throw error;ok+=lote.length;P.innerHTML=`<b>2 de 2 · Gravando clientes:</b> ${ok.toLocaleString("pt-BR")} de ${docs.length.toLocaleString("pt-BR")}. Não feche esta janela.`}}
+      else{for(const d of docs){await S.db.doc("clientes/"+d.id).set(d.data);ok++;if(ok%50===0)P.innerHTML=`<b>2 de 2 · Gravando clientes:</b> ${ok} de ${docs.length}`}}
+      P.innerHTML=`<div class="gate ok"><b>${ok.toLocaleString("pt-BR")} clientes importados.</b> ${corr.toLocaleString("pt-BR")} tiveram a cidade corrigida pelo CEP.${semCep?` ${semCep.toLocaleString("pt-BR")} ficaram sem conferir (sem CEP ou CEP não encontrado): confira quando forem comprar.`:""}</div><div class="small muted">Atualize a página (Ctrl+Shift+R) nos outros computadores para ver todos.</div>`}
+    catch(err){P.innerHTML=`<div class="gate bad">Parou com erro depois de ${ok} clientes: ${esc(errMsg(err)||String(err&&err.message||err))}. Pode clicar em Importar de novo: os que já entraram não são duplicados.</div>`;$("#ic-go").disabled=false}
+    rodando=false;$("#ic-close").disabled=false})}
 /* ---------- imagens: envia ao armazenamento de arquivos; se indisponível, guarda uma versão reduzida no próprio cadastro ---------- */
 async function reduzirImagem(file,max,q){const url=URL.createObjectURL(file);try{const img=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=url});const sc=Math.min(1,max/Math.max(img.width,img.height));const cv=document.createElement("canvas");cv.width=Math.round(img.width*sc);cv.height=Math.round(img.height*sc);const cx=cv.getContext("2d");cx.fillStyle="#fff";cx.fillRect(0,0,cv.width,cv.height);cx.drawImage(img,0,0,cv.width,cv.height);return cv.toDataURL("image/jpeg",q)}finally{URL.revokeObjectURL(url)}}
 async function guardarArquivo(file){const isImg=/^image\//.test(file.type);
@@ -2215,6 +2249,7 @@ document.addEventListener("click",async e=>{if(e.target.closest&&e.target.closes
     case"edit":vendaForm(id);break;
     case"detalhe":detalhe(id);break;
     case"new-cli":cliForm();break;
+    case"imp-cli":impCliForm();break;
     case"new-prod":prodForm();break;
     case"imp-cat":impCat();break;
     case"metas":metasForm();break;
