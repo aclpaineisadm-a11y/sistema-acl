@@ -107,7 +107,8 @@ function mostra(tipo,titulo,texto,extra){const el=$("resultado");el.className="r
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 async function registrar(lido){
   $("proc-txt").textContent="Registrando pedido…";$("processando").style.display="block";$("tela-iniciar").style.display="none";
-  try{const{data,error}=await sb.rpc("registrar_leitura",{p_num:String(lido),p_setor:chave});
+  try{let{data,error}=await sb.rpc("registrar_leitura",{p_num:String(lido),p_setor:chave});
+    if(error){await new Promise(r=>setTimeout(r,1500));({data,error}=await sb.rpc("registrar_leitura",{p_num:String(lido),p_setor:chave}))}
     if(error)throw error;
     const nped=d=>"#"+esc(String(d.numero).padStart(6,"0"))+(d.cliente?" · "+esc(d.cliente):"");
     if(!data||data.erro){$("processando").style.display="none";
@@ -125,7 +126,7 @@ async function registrar(lido){
     if(!res){mostra("ok","Leitura recebida","O pedido vai aparecer em "+esc(nomeSetor)+" assim que o sistema estiver aberto no computador ou na TV.",grade);return}
     if(/registrado em/i.test(res)&&!/já/i.test(res)){mostra("ok","Entrada registrada!","Pedido movido para "+esc(nomeSetor),grade);return}
     mostra("aviso","Não entrou neste setor",esc(res.replace(/^sem mudança \((.*)\)$/,"Nada mudou: $1.")),grade)}
-  catch(e){$("processando").style.display="none";$("tela-iniciar").style.display="block";mostra("erro","Erro de conexão","Verifique a internet e tente de novo.")}}
+  catch(e){$("processando").style.display="none";$("tela-iniciar").style.display="block";mostra("erro","Não consegui registrar","Tente de novo. Se continuar, mande um print desta tela.<br><small>("+esc((e&&(e.message||e.code))||String(e)).slice(0,160)+")</small>")}}
 $("btn-iniciar").onclick=()=>{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){mostra("erro","Este navegador não abre a câmera ao vivo","Use o botão <b>Tirar foto do QR</b> ou digite o número do pedido.");return}iniciar()};
 $("foto").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;$("resultado").style.display="none";$("processando").style.display="block";
   try{const img=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=URL.createObjectURL(f)});let val=null;
