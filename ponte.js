@@ -35,7 +35,7 @@ function telaLogin(msg){
   <form class="bx" id="acl-lf"><h1><span class="sq"></span>SISTEMA ACL</h1>
   <div id="acl-modo" data-m="entrar"></div>
   <label id="acl-nw" hidden>Seu nome<input id="acl-nome" autocomplete="name"></label>
-  <label>E-mail<input id="acl-email" type="email" autocomplete="email" required></label>
+  <label>E-mail ou usuário<input id="acl-email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
   <label id="acl-pw">Senha<input id="acl-senha" type="password" autocomplete="current-password" minlength="6"></label>
   <div class="m" id="acl-msg">${msg||""}</div>
   <button class="p" type="submit" id="acl-go">Entrar</button>
@@ -43,13 +43,13 @@ function telaLogin(msg){
   const $=s=>document.getElementById(s);let modo="entrar";
   const set=m=>{modo=m;$("acl-nw").hidden=m!=="criar";$("acl-pw").hidden=m==="esqueci";$("acl-go").textContent=m==="criar"?"Criar acesso":m==="esqueci"?"Enviar link para o e-mail":"Entrar";$("acl-senha").autocomplete=m==="criar"?"new-password":"current-password";$("acl-msg").textContent="";$("acl-msg").className="m"};
   $("acl-novo").onclick=()=>set(modo==="criar"?"entrar":"criar");$("acl-esq").onclick=()=>set(modo==="esqueci"?"entrar":"esqueci");
-  $("acl-lf").onsubmit=async e=>{e.preventDefault();const em=$("acl-email").value.trim(),pw=$("acl-senha").value;const ms=$("acl-msg");ms.className="m";ms.textContent="Aguarde…";
+  $("acl-lf").onsubmit=async e=>{e.preventDefault();const em0=$("acl-email").value.trim().toLowerCase(),em=em0.includes("@")?em0:em0.replace(/[^a-z0-9._-]/g,"")+"@acl.sistema",pw=$("acl-senha").value;const ms=$("acl-msg");ms.className="m";ms.textContent="Aguarde…";
     try{if(modo==="esqueci"){const{error}=await sb.auth.resetPasswordForEmail(em,{redirectTo:location.href.split("#")[0]});if(error)throw error;ms.className="m ok";ms.textContent="Enviamos um link para "+em+". Abra o e-mail e siga as instruções.";return}
       if(!pw||pw.length<6){ms.textContent="A senha precisa ter pelo menos 6 caracteres.";return}
       if(modo==="criar"){const{data,error}=await sb.auth.signUp({email:em,password:pw,options:{data:{nome:$("acl-nome").value.trim()},emailRedirectTo:location.href.split("#")[0]}});if(error)throw error;
         if(!data.session){ms.className="m ok";ms.textContent="Acesso criado. Confirme pelo link enviado para "+em+" e depois entre aqui.";set("entrar");$("acl-msg").className="m ok";$("acl-msg").textContent="Confirme o e-mail e depois entre com sua senha.";return}}
       else{const{error}=await sb.auth.signInWithPassword({email:em,password:pw});if(error)throw error}
-    }catch(err){ms.className="m";const t=String(err.message||err);ms.textContent=/Invalid login/i.test(t)?"E-mail ou senha incorretos.":/Email not confirmed/i.test(t)?"Confirme seu e-mail pelo link que enviamos antes de entrar.":/already registered/i.test(t)?"Este e-mail já tem acesso. Use Entrar.":"Não foi possível: "+t}};
+    }catch(err){ms.className="m";const t=String(err.message||err);ms.textContent=/Invalid login/i.test(t)?"Usuário/e-mail ou senha incorretos.":/Email not confirmed/i.test(t)?"Confirme seu e-mail pelo link que enviamos antes de entrar.":/already registered/i.test(t)?"Este e-mail já tem acesso. Use Entrar.":"Não foi possível: "+t}};
   if(location.hash.includes("type=recovery")){set("entrar");$("acl-msg").className="m ok";$("acl-msg").textContent="Digite a nova senha e clique em Entrar."}
 }
 async function carregaPerfil(){for(let k=0;k<5;k++){const{data}=await sb.from("perfis").select("*").eq("id",sessao.user.id).maybeSingle();if(data){perfil=data;return}await new Promise(r=>setTimeout(r,600))}perfil={id:sessao.user.id,nome:sessao.user.email,admin:false}}
