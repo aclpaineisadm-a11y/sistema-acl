@@ -1588,9 +1588,12 @@ function cliForm(id){const c=id?cliBy(id):{tipo:"decorador"};const st=id&&statsC
     try{if(id){if(!c.codigo)d.codigo=nextCliCod();await S.db.doc("clientes/"+id).update(d)}else{d.codigo=nextCliCod();d.criadoEm=new Date().toISOString();d.por=S.uid||"";await S.db.collection("clientes").add(d)}toast("Cliente salvo");closeModal();const nb=document.querySelector("#fv-clibox");if(nb){nb.dataset.cid="";const inp=document.querySelector("#fv-cli");if(inp)inp.dispatchEvent(new Event("input"))}}catch(err){toast(errMsg(err),true)}});
 }
 /* ---------- CEP e importação de clientes do JOB ---------- */
-async function buscaCep(cep){const d=String(cep||"").replace(/\D/g,"");if(d.length!==8)return null;
-  try{const j=await fetch("https://viacep.com.br/ws/"+d+"/json/").then(r=>{if(!r.ok)throw 0;return r.json()});if(j&&!j.erro)return{cep:d.slice(0,5)+"-"+d.slice(5),cidade:j.localidade,uf:j.uf,ibge:j.ibge,rua:j.logradouro,bairro:j.bairro}}catch(e){}
-  try{const j=await fetch("https://brasilapi.com.br/api/cep/v2/"+d).then(r=>{if(!r.ok)throw 0;return r.json()});if(j&&j.city)return{cep:d.slice(0,5)+"-"+d.slice(5),cidade:j.city,uf:j.state,ibge:"",rua:j.street||"",bairro:j.neighborhood||""}}catch(e){}
+let VIACEP_OFF=0;
+async function buscaCep(cep){const d=String(cep||"").replace(/\D/g,"");if(d.length!==8)return null;const f=d.slice(0,5)+"-"+d.slice(5);
+  const get=async(u,ms)=>{const r=await fetch(u,{signal:AbortSignal.timeout(ms)});if(!r.ok)throw 0;return r.json()};
+  if(VIACEP_OFF<3){try{const j=await get("https://viacep.com.br/ws/"+d+"/json/",4000);VIACEP_OFF=0;if(j&&!j.erro)return{cep:f,cidade:j.localidade,uf:j.uf,ibge:j.ibge,rua:j.logradouro,bairro:j.bairro}}catch(e){VIACEP_OFF++}}
+  try{const j=await get("https://opencep.com/v1/"+d,6000);if(j&&j.localidade)return{cep:f,cidade:j.localidade,uf:j.uf,ibge:j.ibge||"",rua:j.logradouro||"",bairro:j.bairro||""}}catch(e){}
+  try{const j=await get("https://brasilapi.com.br/api/cep/v2/"+d,6000);if(j&&j.city)return{cep:f,cidade:j.city,uf:j.state,ibge:"",rua:j.street||"",bairro:j.neighborhood||""}}catch(e){}
   return null}
 const fmtDoc=d=>{d=String(d||"").replace(/\D/g,"");return d.length===11?d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,"$1.$2.$3-$4"):d.length===14?d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,"$1.$2.$3/$4-$5"):d};
 function impCliForm(){if(!S.isAdmin)return toast("Só o gestor importa clientes.",true);let dados=null,rodando=false;
