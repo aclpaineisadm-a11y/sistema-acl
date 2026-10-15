@@ -849,7 +849,7 @@ body.tv .meta .bigv{font-size:4rem}
     <div class="panel"><div class="tbl-wrap" id="pc-tbl"></div></div>
   </section>
   <section class="view" id="v-usu" hidden>
-    <div class="view-head"><div class="grow"><h2>Usuários e setores</h2><p>Cada pessoa vê só o menu dos setores marcados para ela. Quem abre o sistema pela primeira vez aparece aqui aguardando liberação. Para alguém conseguir abrir o sistema, ele precisa antes ser convidado pelo menu de compartilhamento.</p></div></div>
+    <div class="view-head"><div class="grow"><h2>Usuários e setores</h2><p>Crie aqui o acesso de cada pessoa ou setor: um usuário (ex.: expedicao, isadora) e uma senha. A pessoa entra no sistema digitando só o usuário e a senha. Cada uma vê só os setores marcados.</p></div><button class="btn primary w" data-act="usu-novo">+ Novo usuário</button></div>
     <div class="panel"><div class="tbl-wrap" id="usu-tbl"></div></div>
     <div class="panel"><div class="panel-b small muted" id="usu-leg"></div></div>
   </section>
@@ -902,7 +902,7 @@ const fd=s=>{if(!s)return"";const [y,m,d]=String(s).slice(0,10).split("-");retur
 const fdy=s=>{if(!s)return"";const [y,m,d]=String(s).slice(0,10).split("-");return d+"/"+m+"/"+y.slice(2)};
 const fdh=iso=>{const d=new Date(iso);return isNaN(d)?"":d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})};
 const horas=ms=>{const h=ms/36e5;return h<1?Math.round(h*60)+" min":h<48?h.toLocaleString("pt-BR",{maximumFractionDigits:1})+" h":(h/24).toLocaleString("pt-BR",{maximumFractionDigits:1})+" dias"};
-const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 const brl=new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"});
 const brk=v=>{const a=Math.abs(v);if(a>=1e6)return(v/1e6).toLocaleString("pt-BR",{maximumFractionDigits:1})+" mi";if(a>=1e3)return(v/1e3).toLocaleString("pt-BR",{maximumFractionDigits:0})+" mil";return Math.round(v).toLocaleString("pt-BR")};
 const r2=v=>Math.round((+v||0)*100)/100;
@@ -2314,11 +2314,26 @@ function aplicarPerfis(){document.querySelectorAll(".setor").forEach(b=>{b.hidde
   const q=$("#quem");const mp=meusPerfis();q.textContent=S.isAdmin?"· gestor":mp.length?"· "+mp.map(p=>PERFIS[p].split(" (")[0]).join(", "):"";
   if(!S.isAdmin&&S.perfilPronto&&!mp.length){document.querySelectorAll(".view").forEach(s=>s.hidden=s.id!=="v-semacesso");document.querySelectorAll(".setor,.tab").forEach(b=>b.hidden=true);return}
   const cur=document.querySelector('.tab[data-view="'+S.view+'"]');if(!cur||!podeVer(cur)){const v=primeiraPermitida("");if(v)go(v)}else setSetor(cur.dataset.setor)}
-function renderUsu(){const box=$("#usu-tbl");if(!box||!S.isAdmin)return;const ids=[...new Set(Object.keys(S.usuarios).concat(S.acessos.map(a=>a.id)))].filter(i=>i&&i!==S.uid);
-  $("#usu-leg").innerHTML=Object.keys(PERFIS).map(k=>`<b>${esc(PERFIS[k])}</b>: ${esc({vendas:"tirar pedido, orçamentos, clientes, consulta de produtos e análise",financeiro:"pagamentos a confirmar, contas, conciliação, fluxo e DRE",pcp:"painel de produção, liberação, pedidos, leitura e indicadores",fabrica:"só a tela de leitura do QR do setor",almox:"estoque, entradas e saídas, fornecedores, cotações e etiquetas"}[k])}`).join("<br>")+"<br><b>Gestor</b>: você e quem tiver acesso de edição completo veem tudo, inclusive a Gestão.";
-  if(!ids.length){box.innerHTML=`<div class="empty"><b>Ninguém além de você ainda</b>Compartilhe o sistema com as pessoas da empresa. Quando cada uma abrir pela primeira vez, ela aparece aqui para você marcar os setores.</div>`;return}
-  resolveNamesIds(ids);
-  box.innerHTML=`<table><thead><tr><th>Pessoa</th>${Object.keys(PERFIS).map(k=>`<th>${esc(PERFIS[k].split(" (")[0])}</th>`).join("")}<th></th></tr></thead><tbody>${ids.map(id=>{const u=S.usuarios[id]||{perfis:[]};const pend=!S.usuarios[id];return `<tr data-uid="${esc(id)}"><td>${esc(S.names[id]||"…")}${pend?' <span class="pill warn">aguardando liberação</span>':""}</td>${Object.keys(PERFIS).map(k=>`<td><input type="checkbox" class="usu-p" data-p="${k}" ${u.perfis.includes(k)?"checked":""} aria-label="${esc(PERFIS[k])}" style="width:auto"></td>`).join("")}<td class="r"><button class="btn sm primary" data-act="usu-salvar" data-id="${esc(id)}">Salvar</button></td></tr>`}).join("")}</tbody></table>`}
+async function usuCall(body){if(!window.SB||!window.SB.functions)throw new Error("Disponível só no sistema publicado.");const r=await window.SB.functions.invoke("usuarios",{body});if(r.error){let m=r.error.message;try{const j=await r.error.context.json();m=j.erro||m}catch(e){}throw new Error(m)}if(r.data&&r.data.erro)throw new Error(r.data.erro);return r.data}
+async function usuCarregar(){try{const r=await usuCall({acao:"listar"});S.usuList=r.usuarios||[];S.usuList.forEach(u=>{S.names[u.id]=u.nome||u.usuario})}catch(e){S.usuErro=String(e.message||e)}if(S.view==="usu")renderUsu()}
+function renderUsu(){const box=$("#usu-tbl");if(!box||!S.isAdmin)return;if(!S.usuList&&!S.usuCarregando){S.usuCarregando=true;usuCarregar().finally(()=>{S.usuCarregando=false})}
+  const L=S.usuList||[];const ids=[...new Set(L.map(u=>u.id).concat(Object.keys(S.usuarios)).concat(S.acessos.map(a=>a.id)))].filter(i=>i&&i!==S.uid);const byId=Object.fromEntries(L.map(u=>[u.id,u]));
+  $("#usu-leg").innerHTML=Object.keys(PERFIS).map(k=>`<b>${esc(PERFIS[k])}</b>: ${esc({vendas:"tirar pedido, orçamentos, clientes, consulta de produtos e análise",financeiro:"pagamentos a confirmar, contas, conciliação, fluxo e DRE",pcp:"painel de produção, liberação, pedidos, leitura e indicadores",fabrica:"só a tela de leitura do QR do setor",almox:"estoque, entradas e saídas, fornecedores, cotações e etiquetas"}[k])}`).join("<br>")+"<br><b>Gestor</b>: você vê tudo, inclusive a Gestão.";
+  if(!ids.length){box.innerHTML=`<div class="empty"><b>${S.usuList?"Ninguém além de você ainda":"Carregando…"}</b>${S.usuList?"Clique em <b>+ Novo usuário</b> para criar o acesso de cada pessoa ou setor.":""}${S.usuErro?`<div class="neg small">${esc(S.usuErro)}</div>`:""}</div>`;return}
+  resolveNamesIds(ids.filter(i=>!byId[i]));
+  box.innerHTML=`<table><thead><tr><th>Pessoa / setor</th>${Object.keys(PERFIS).map(k=>`<th>${esc(PERFIS[k].split(" (")[0])}</th>`).join("")}<th></th></tr></thead><tbody>${ids.map(id=>{const u=S.usuarios[id]||{perfis:[]};const pend=!S.usuarios[id];const x=byId[id];return `<tr data-uid="${esc(id)}"><td><b>${esc((x&&x.nome)||S.names[id]||"…")}</b>${x?`<div class="small muted">usuário: <span class="num" style="user-select:all">${esc(x.usuario||"")}</span>${x.ultimo?" · último acesso "+fdh(x.ultimo):" · ainda não entrou"}</div>`:""}${pend?' <span class="pill warn">sem setor</span>':""}</td>${Object.keys(PERFIS).map(k=>`<td><input type="checkbox" class="usu-p" data-p="${k}" ${u.perfis.includes(k)?"checked":""} aria-label="${esc(PERFIS[k])}" style="width:auto"></td>`).join("")}<td class="r" style="white-space:nowrap"><button class="btn sm primary" data-act="usu-salvar" data-id="${esc(id)}">Salvar</button> ${x?`<button class="btn sm" data-act="usu-senha" data-id="${esc(id)}">Trocar senha</button> <button class="btn sm danger" data-act="usu-rem" data-id="${esc(id)}">Remover</button>`:""}</td></tr>`}).join("")}</tbody></table>`}
+function usuNovoForm(){openModal(`<div class="panel-h"><h3>Novo usuário</h3></div><form id="f-un" class="panel-b" style="display:flex;flex-direction:column;gap:12px" autocomplete="off">
+    <label class="f">Nome (como aparece no sistema)<input id="un-n" required placeholder="Ex.: Isadora ou Expedição"></label>
+    <label class="f">Usuário (para entrar)<input id="un-u" required autocapitalize="none" spellcheck="false" placeholder="Ex.: isadora ou expedicao"></label>
+    <label class="f">Senha (mínimo 6 caracteres)<input id="un-s" type="text" required minlength="6" autocomplete="new-password"></label>
+    <div class="small muted">Anote o usuário e a senha e entregue para a pessoa. Ela entra digitando só o usuário (sem @) e a senha.</div>
+    <div><span class="eyebrow">Setores</span><div class="row" style="gap:14px;margin-top:6px">${Object.keys(PERFIS).map(k=>`<label class="chk"><input type="checkbox" class="un-p" value="${k}"> ${esc(PERFIS[k].split(" (")[0])}</label>`).join("")}</div></div>
+    <div class="foot"><button type="button" class="btn" data-act="close">Voltar</button><button class="btn primary" type="submit">Criar usuário</button></div></form>`);
+  $("#un-n").addEventListener("input",()=>{const u=$("#un-u");if(!u.dataset.t)u.value=$("#un-n").value.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"").slice(0,20)});$("#un-u").addEventListener("input",e=>e.target.dataset.t="1");
+  $("#f-un").addEventListener("submit",async e=>{e.preventDefault();const bt=e.submitter;bt.disabled=true;const perfis=[...document.querySelectorAll(".un-p:checked")].map(x=>x.value);if(!perfis.length){bt.disabled=false;return toast("Marque pelo menos um setor.",true)}
+    try{const r=await usuCall({acao:"criar",nome:$("#un-n").value.trim(),usuario:$("#un-u").value.trim(),senha:$("#un-s").value,perfis});toast("Usuário "+r.usuario+" criado");closeModal();S.usuList=null;renderUsu()}catch(err){toast(String(err.message||err),true);bt.disabled=false}})}
+function usuSenhaForm(id){const x=(S.usuList||[]).find(u=>u.id===id);openModal(`<div class="panel-h"><h3>Trocar senha · ${esc((x&&x.nome)||"")}</h3></div><form id="f-us" class="panel-b" style="display:flex;flex-direction:column;gap:12px" autocomplete="off"><label class="f">Nova senha (mínimo 6 caracteres)<input id="us-s" type="text" required minlength="6" autocomplete="new-password"></label><div class="foot"><button type="button" class="btn" data-act="close">Voltar</button><button class="btn primary" type="submit">Trocar senha</button></div></form>`);
+  $("#f-us").addEventListener("submit",async e=>{e.preventDefault();const bt=e.submitter;bt.disabled=true;try{await usuCall({acao:"senha",id,senha:$("#us-s").value});toast("Senha trocada");closeModal()}catch(err){toast(String(err.message||err),true);bt.disabled=false}})}
 async function resolveNamesIds(ids){if(!S.user||!S.user.profiles)return;const need=ids.filter(i=>!S.names[i]);if(!need.length)return;try{const ps=await S.user.profiles(need);let mud=false;Object.keys(ps||{}).forEach(i=>{if(!S.names[i]){S.names[i]=(ps[i]&&ps[i].name)||"Sem nome";mud=true}});if(mud&&S.view==="usu")renderUsu()}catch(e){}}
 /* ---------- pedido gera contas a receber no Financeiro ---------- */
 function centroDe(ls){ls=ls||[];if(ls.length&&ls.every(l=>l==="confeccao"||l==="aplique"))return"tecidos";if(ls.length&&ls.every(l=>l==="serralheria"||l==="marcenaria"))return"estruturas";return"compart"}
@@ -2380,6 +2395,9 @@ document.addEventListener("click",async e=>{if(e.target.closest&&e.target.closes
     case"pc-cancel":{const pc=S.pcs.find(x=>x.id===id);confirmBox("Cancelar "+pc.numero+"?","O pedido de compra fica registrado como cancelado.","Cancelar pedido de compra",async()=>{await S.db.doc("compras/"+id).update({status:"cancelado"});toast("Pedido de compra cancelado")});break}
     case"rel-csv":{const r=relAtual();await baixar("relatorio-"+r.id+"-"+R.ini+"-a-"+R.fim+".csv",relCsv());break}
     case"rel-print":{const r=relAtual();await baixar("relatorio-"+r.id+"-"+R.ini+"-a-"+R.fim+".html",relHtml(await logoData()));break}
+    case"usu-novo":usuNovoForm();break;
+    case"usu-senha":usuSenhaForm(id);break;
+    case"usu-rem":{const x=(S.usuList||[]).find(u=>u.id===id);confirmBox("Remover "+((x&&x.nome)||"usuário")+"?","A pessoa não consegue mais entrar no sistema. Os pedidos e registros feitos por ela continuam.","Remover acesso",async()=>{await usuCall({acao:"remover",id});S.usuList=null;toast("Acesso removido");renderUsu()});break}
     case"usu-salvar":{const tr=a.closest("tr");const perfis=[...tr.querySelectorAll(".usu-p:checked")].map(x=>x.dataset.p);const u=Object.assign({},S.usuarios);u[id]={perfis,em:new Date().toISOString()};await S.db.doc("config/usuarios").set({u});toast(perfis.length?"Acesso liberado":"Acesso removido");break}
     case"aprovar":aprovarForm(id);break;
     case"perder":perderForm(id);break;
@@ -2450,7 +2468,7 @@ const fq=n=>nf.format(Math.round((+n||0)*1000)/1000);
 const fdata=iso=>{if(!iso)return"";const d=new Date(iso);return isNaN(d)?esc(iso):d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"2-digit"})};
 const fdh=iso=>{const d=new Date(iso);if(isNaN(d))return"";const hoje=new Date();const same=d.toDateString()===hoje.toDateString();return same?"hoje "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}):d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})};
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
-const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 
 function toast(msg,err){const t=$("#toast");t.textContent=msg;t.className="toast"+(err?" err":"");t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,err?5000:2600)}
 function setSync(state,txt){$("#dot").className="dot"+(state==="on"?" on":state==="err"?" err":"");$("#synctxt").textContent=txt}
@@ -2866,7 +2884,7 @@ const dayDiff=(a,b)=>Math.abs(new Date(a+"T12:00:00")-new Date(b+"T12:00:00"))/8
 const fd=s=>{if(!s)return"";const [y,m,d]=String(s).split("-");return d+"/"+m+"/"+String(y).slice(2)};
 const fmes=s=>{if(!s)return"";const [y,m]=s.split("-");return MESES[+m-1]+"/"+y.slice(2)};
 const fdh=iso=>{const d=new Date(iso);return isNaN(d)?"":d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})};
-const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 function toast(msg,err){const t=$("#toast");t.textContent=msg;t.className="toast"+(err?" err":"");t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,err?5500:2600)}
 function setSync(st,txt){$("#dot").className="dot"+(st==="on"?" on":st==="err"?" err":"");$("#synctxt").textContent=txt}
 function errMsg(e){const c=e&&e.code;if(c==="invalid_argument")return"Sem permissão para salvar. Peça acesso de edição ao administrador.";if(c==="quota_exceeded")return"O banco chegou ao limite de registros.";if(c==="unavailable")return"Sem conexão com o banco. Tente de novo.";return"Não foi possível salvar ("+(c||"erro")+")."}
