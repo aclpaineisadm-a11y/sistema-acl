@@ -1551,7 +1551,7 @@ function detalhe(id){let visto=false;const draw=()=>{const p=S.all.find(x=>x.id=
     <div class="grid2"><div><span class="eyebrow">Cliente</span><div>${esc(p.cliente)}</div><div class="small muted" style="user-select:all">${esc(p.contato||"")}</div></div><div><span class="eyebrow">Prazo</span><div class="num ${atrasado(p)?"neg":""}">${fdy(p.prazo)}</div><div class="small muted">pedido em ${fdy(p.dataPedido)}</div></div><div><span class="eyebrow">Origem e pagamento</span><div>${esc(p.origem||"")}</div><div class="small muted">${esc(p.forma||"")}</div></div><div><span class="eyebrow">Vendedor</span><div>${esc(vnome(vkey(p)))}</div></div>${analiseMaterial(p).temComp||(p.baixaEstoque&&+p.baixaEstoque.custo)?(()=>{const c=custoPedido(p),t=totalDe(p);return `<div><span class="eyebrow">Custo de material</span><div class="num">${brl.format(c)}</div><div class="small ${t&&(t-c)/t<.3?"neg":"muted"}">margem sobre material ${t?pct((t-c)/t):"—"}</div></div>`})():""}</div>
     ${routeHtml(p,"")}
     ${itensHtml(p,true)}
-    <div class="grid2">${pags2(p).length?`<div class="small"><span class="eyebrow">Pagamento combinado</span><br>${pags2(p).map(x=>esc(x.forma+" "+brl.format(+x.valor||0)+" · venc. "+fdy(x.venc))).join("<br>")}${p.clienteDissePago?`<br><span class="pill warn">cliente diz que já pagou</span> ${esc(p.comprovanteObs||"")}`:""}</div>`:""}${p.entrega?`<div class="small"><span class="eyebrow">Entrega</span><br>${esc(ENTREGAS[p.entrega.tipo]||"")}${p.entrega.endereco?"<br>"+esc(p.entrega.endereco):""}</div>`:""}</div>
+    <div class="grid2">${pags2(p).length?`<div class="small"><span class="eyebrow">Pagamento combinado</span><br>${pags2(p).map(x=>esc(x.forma+" "+brl.format(+x.valor||0)+" · venc. "+fdy(x.venc))).join("<br>")}${p.clienteDissePago?`<br><span class="pill warn">cliente diz que já pagou</span> ${esc(p.comprovanteObs||"")}`:""}</div>`:""}${p.entrega?`<div class="small"><span class="eyebrow">Entrega</span><br>${esc(ENTREGAS[p.entrega.tipo]||"")}${p.entrega.endereco?"<br>"+esc(p.entrega.endereco):""}</div>`:""}${p.fase!=="orcamento"?nfeBox(p):""}</div>
     ${p.obs?`<div class="small" style="white-space:pre-wrap"><span class="eyebrow">Observações para o cliente</span><br>${esc(p.obs)}</div>`:""}
     ${p.obsInterna?`<div class="small" style="white-space:pre-wrap"><span class="eyebrow">Observações internas</span><br>${esc(p.obsInterna)}</div>`:""}
     ${(p.midias||[]).length?`<div><span class="eyebrow">Mídias</span><div class="mids" style="margin-top:6px">${p.midias.map(m=>m.data?`<div class="mid"><img src="${esc(m.data)}" alt="${esc(m.nome)}"><span class="small">${esc(m.nome)}</span></div>`:`<a class="mid" href="${window.BLOB_BASE||"/_blob/"}${esc(m.id)}" target="_blank" rel="noopener">${/^image\//.test(m.tipo)?`<img src="${window.BLOB_BASE||"/_blob/"}${esc(m.id)}" alt="${esc(m.nome)}">`:`<div class="mid-doc">PDF</div>`}<span class="small">${esc(m.nome)}</span></a>`).join("")}</div></div>`:""}
@@ -1559,6 +1559,105 @@ function detalhe(id){let visto=false;const draw=()=>{const p=S.all.find(x=>x.id=
       ${p.status==="cancelado"||p.status==="enviado"?"":liberado(p)?`<div class="ck y"><span class="ic">✓</span><span class="t">Liberado pelo PCP em ${fdh(p.liberado.em)}</span><button class="btn sm danger w" data-act="liberar" data-v="0" data-id="${id}">Cancelar liberação</button></div>`:`<button class="btn go w" data-act="liberar" data-v="1" data-id="${id}" ${it.every(x=>x.ok)?"":"disabled"} style="align-self:flex-start">Liberar para produção</button>`}</div></div>
     <div><span class="eyebrow">Trilha</span><div class="timeline" style="margin-top:6px">${trilha(p).slice().reverse().map(t=>`<div class="tl"><span class="small muted num">${fdh(t.em)}</span><span><b>${esc(SET[t.s]?SET[t.s].nome:t.s)}</b> · ${esc(acaoNome[t.a]||t.a)} <span class="small muted">· ${esc(nomeUser(t.por))}${t.obs?" · "+esc(t.obs):""}</span></span></div>`).join("")}</div></div>
   </div>`};openModal("",draw);draw()}
+/* ---------- NF-e (Focus NFe, pela função "nfe" do Supabase) ---------- */
+const NFE_MKT=["Mercado Livre","Shopee","TikTok Shop"];
+const NFE_TRANSP={braspress:{nome:"BRASPRESS TRANSPORTES URGENTES LTDA",cnpj:"48740351005558",ie:"255010885",end:"ROD. GOVERNADOR JORGE LACERDA 1730 KM 13",mun:"CRICIÚMA",uf:"SC"},tanamao:{nome:"TA NA MAO EXPRESS LTDA",cnpj:"39402351000164",ie:"260733008",end:"RUA GABRIEL STRACHOSKI, 211",mun:"CRICIÚMA",uf:"SC"}};
+const NFE_IBPT={"55121900":13.45,"73239400":16.23};
+const NFE_ST={processando_autorizacao:["Processando","warn"],autorizado:["Autorizada","ok"],erro_autorizacao:["Rejeitada","bad"],denegado:["Denegada","bad"],cancelado:["Cancelada","cinza"],enviando:["Enviando","warn"]};
+const soDig=s=>String(s||"").replace(/\D/g,"");
+const nfeFisc=()=>Object.assign({cnpj:"39585563000124",natureza:"VENDA DE MERCADORIA",aliqCred:3.83,ufEmit:"SC"},(S.emp&&S.emp.fiscal)||{});
+async function nfeCall(body){if(!window.SB||!window.SB.functions)throw new Error("Emissão de nota só funciona no sistema publicado.");const r=await window.SB.functions.invoke("nfe",{body});
+  if(r.error){let m=r.error.message;try{const j=await r.error.context.json();m=j.erro||m}catch(e){}throw new Error(m)}if(r.data&&r.data.erro)throw new Error(r.data.erro);return r.data}
+let NFE_AMB=null;async function nfeAmbiente(){if(!NFE_AMB){try{NFE_AMB=(await nfeCall({acao:"ambiente"})).ambiente}catch(e){NFE_AMB="?"}}return NFE_AMB}
+function nfeBase(amb){return amb==="producao"?"https://api.focusnfe.com.br":"https://homologacao.focusnfe.com.br"}
+function nfePode(p){if(NFE_MKT.includes(p.origem))return"A nota deste pedido é emitida pelo marketplace ("+p.origem+").";if(p.status==="cancelado")return"Pedido cancelado.";return""}
+function nfeChecar(p,c){const f=[];if(!c)f.push("O pedido não está ligado a um cliente cadastrado. Edite o pedido e escolha o cliente.");else{const d=soDig(c.documento);if(d.length!==11&&d.length!==14)f.push("Cliente sem CPF/CNPJ válido.");if(!c.rua)f.push("Cliente sem rua no endereço.");if(!c.bairro)f.push("Cliente sem bairro.");if(soDig(c.cep).length!==8)f.push("Cliente sem CEP.");if(!c.cidade||!c.uf)f.push("Cliente sem cidade/UF.")}
+  (p.itens||[]).forEach((i,k)=>{const pr=i.produtoId&&prodBy(i.produtoId);if(soDig(pr&&pr.ncm).length!==8)f.push("Item "+(k+1)+" ("+(i.desc||"").slice(0,40)+"): "+(pr?"produto "+pr.codigo+" sem NCM no cadastro":"item sem produto cadastrado (precisa do NCM)")+".")});
+  if(!(p.itens||[]).length)f.push("Pedido sem itens.");if(!(totalDe(p)>0))f.push("Pedido com valor zero.");return f}
+const r2n=v=>Math.round((+v||0)*100)/100;
+function nfeRateio(base,tot){const s=base.reduce((a,b)=>a+b,0);if(!tot||!s)return base.map(()=>0);let acc=0;return base.map((b,k)=>{if(k===base.length-1)return r2n(tot-acc);const v=r2n(tot*b/s);acc=r2n(acc+v);return v})}
+function nfeMontar(p,c,o,amb){const F=nfeFisc();const uf=(c.uf||"").toUpperCase();const dentro=uf===F.ufEmit;const its=p.itens||[];
+  const brutos=its.map(i=>r2n(itemBruto(i)));const liq=its.map(i=>itemTotal(i));const descIt=its.map((i,k)=>r2n(brutos[k]-liq[k]));
+  const descPed=nfeRateio(liq,+p.desconto||0);const outros=r2n((+p.frete||0)+(+p.outros||0));const outIt=nfeRateio(liq.map((v,k)=>Math.max(0,v-descPed[k])),outros);
+  const items=its.map((i,k)=>{const pr=prodBy(i.produtoId)||{};const ncm=soDig(pr.ncm);const vl=r2n(liq[k]-descPed[k]+outIt[k]);
+    const desc=[i.desc,i.complemento].filter(Boolean).join(" - ").replace(/\s+/g," ").trim().slice(0,120);
+    const it={numero_item:k+1,codigo_produto:i.codigo||pr.codigo||String(k+1),descricao:desc,cfop:dentro?"5101":"6101",unidade_comercial:(i.un||"UN").toUpperCase(),quantidade_comercial:+i.qtd||0,valor_unitario_comercial:+i.preco||0,valor_bruto:brutos[k],unidade_tributavel:(i.un||"UN").toUpperCase(),quantidade_tributavel:+i.qtd||0,valor_unitario_tributavel:+i.preco||0,codigo_ncm:ncm,icms_origem:0,icms_situacao_tributaria:"102",pis_situacao_tributaria:"49",cofins_situacao_tributaria:"49",valor_total_tributos:r2n(vl*(NFE_IBPT[ncm]||13.45)/100)};
+    const dv=r2n(descIt[k]+descPed[k]);if(dv>0)it.valor_desconto=dv;if(outIt[k]>0)it.valor_outras_despesas=outIt[k];return it});
+  const vProd=r2n(brutos.reduce((a,b)=>a+b,0)),vDesc=r2n(items.reduce((a,x)=>a+(x.valor_desconto||0),0)),vTot=r2n(vProd-vDesc+outros);
+  const doc=soDig(c.documento);const ie=soDig(o.ie);const agora=new Date(Date.now()-3*36e5).toISOString().slice(0,19)+"-03:00";
+  const n={natureza_operacao:F.natureza,data_emissao:agora,data_entrada_saida:agora,tipo_documento:1,local_destino:dentro?1:2,finalidade_emissao:1,consumidor_final:1,presenca_comprador:9,cnpj_emitente:F.cnpj,
+    nome_destinatario:amb==="producao"?String(c.nome).slice(0,60):"NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL",
+    logradouro_destinatario:String(c.rua).slice(0,60),numero_destinatario:String(c.numero||"S/N").slice(0,60),bairro_destinatario:String(c.bairro).slice(0,60),municipio_destinatario:c.cidade,uf_destinatario:uf,cep_destinatario:soDig(c.cep),pais_destinatario:"Brasil",
+    indicador_inscricao_estadual_destinatario:doc.length===14&&ie?1:9,modalidade_frete:o.modFrete,valor_produtos:vProd,valor_desconto:vDesc,valor_outras_despesas:outros,valor_frete:0,valor_total:vTot,items};
+  if(c.ibge)n.codigo_municipio_destinatario=c.ibge;if(doc.length===14)n.cnpj_destinatario=doc;else n.cpf_destinatario=doc;if(n.indicador_inscricao_estadual_destinatario===1)n.inscricao_estadual_destinatario=ie;
+  const tel=soDig(c.celular||c.telefone);if(tel.length>=10)n.telefone_destinatario=tel;if(c.email)n.email_destinatario=c.email;
+  const T=NFE_TRANSP[o.transp];if(T)Object.assign(n,{nome_transportador:T.nome,cnpj_transportador:T.cnpj,inscricao_estadual_transportador:T.ie,endereco_transportador:T.end,municipio_transportador:T.mun,uf_transportador:T.uf});
+  if(+o.volQtd>0)n.volumes=[{quantidade:+o.volQtd,especie:o.volEsp||"VOLUME",peso_bruto:+o.pesoB||0,peso_liquido:+o.pesoL||0}];
+  const PG={"Pix":"17","Boleto":"15","Cartão (link)":"03","Dinheiro":"01"};const ps=pags2(p).filter(x=>+x.valor>0);const somaP=r2n(ps.reduce((a,x)=>a+(+x.valor||0),0));
+  n.formas_pagamento=ps.length&&Math.abs(somaP-vTot)<.02?Object.values(ps.reduce((m,x)=>{const f=PG[x.forma]||"99";m[f]=m[f]||{forma_pagamento:f,valor_pagamento:0};m[f].valor_pagamento=r2n(m[f].valor_pagamento+(+x.valor||0));return m},{})):[{forma_pagamento:PG[(ps[0]||{}).forma||p.forma]||"99",valor_pagamento:vTot}];
+  n.formas_pagamento.forEach(x=>{if(x.forma_pagamento==="99")x.descricao_pagamento="A combinar"});
+  const bol=ps.filter(x=>x.forma==="Boleto");if(bol.length){n.numero_fatura=String(p.numero);n.valor_original_fatura=r2n(bol.reduce((a,x)=>a+(+x.valor||0),0));n.valor_liquido_fatura=n.valor_original_fatura;n.duplicatas=bol.map((x,k)=>({numero:String(k+1).padStart(3,"0"),data_vencimento:x.venc||today(),valor:r2n(+x.valor||0)}))}
+  const cred=r2n(vTot*F.aliqCred/100);const brs=v=>v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+  n.informacoes_adicionais_contribuinte=[o.vendedor?"Vendedor: "+o.vendedor:"","VENDA: "+p.numero+(o.obs?" | "+o.obs:""),"PERMITE O APROVEITAMENTO DO CRÉDITO DE ICMS NO VALOR DE R$ "+brs(cred)+"; CORRESPONDENTE À ALÍQUOTA DE "+brs(F.aliqCred)+"%, NOS TERMOS DO ART. 15, XXVI, ANEXO 2, DO RICMS/SC."].filter(Boolean).join(" | ").slice(0,2000);
+  return n}
+function nfeBox(p){const bloq=nfePode(p);const n=p.nfe;const adm=S.isAdmin;
+  if(bloq&&!n)return `<div class="small"><span class="eyebrow">Nota fiscal</span><br><span class="muted">${esc(bloq)}</span></div>`;
+  if(!n)return `<div class="small"><span class="eyebrow">Nota fiscal</span><br><span class="muted">Ainda não emitida.</span> ${adm?`<button class="btn sm primary w" data-act="nfe-emitir" data-id="${p.id}">Emitir NF-e</button>`:""}</div>`;
+  const st=NFE_ST[n.status]||[n.status,"cinza"];const base=nfeBase(n.ambiente);
+  return `<div class="small"><span class="eyebrow">Nota fiscal${n.ambiente==="producao"?"":" · HOMOLOGAÇÃO (teste, sem valor fiscal)"}</span><br><span class="pill ${st[1]}">${esc(st[0])}</span> ${n.numero?"<b>NF "+esc(n.numero)+"</b> série "+esc(n.serie||"1"):""} <span class="muted">${n.em?fdh(n.em):""}</span>
+    ${n.mensagem&&n.status!=="autorizado"?`<div class="${n.status==="erro_autorizacao"?"neg":"muted"}" style="margin-top:4px">${esc(n.mensagem)}</div>`:""}
+    <div class="row" style="gap:6px;margin-top:6px">${n.danfe?`<a class="btn sm w" href="${esc(base+n.danfe)}" target="_blank" rel="noopener">DANFE (PDF)</a>`:""}${n.xml?`<a class="btn sm w" href="${esc(base+n.xml)}" target="_blank" rel="noopener">XML</a>`:""}${n.cce?`<a class="btn sm w" href="${esc(base+n.cce)}" target="_blank" rel="noopener">Carta de correção</a>`:""}
+    ${adm&&(n.status==="processando_autorizacao"||n.status==="enviando")?`<button class="btn sm w" data-act="nfe-atual" data-id="${p.id}">Atualizar</button>`:""}
+    ${adm&&(n.status==="erro_autorizacao"||n.status==="cancelado")&&!bloq?`<button class="btn sm primary w" data-act="nfe-emitir" data-id="${p.id}">${n.status==="cancelado"?"Emitir nova NF-e":"Corrigir e emitir de novo"}</button>`:""}
+    ${adm&&n.status==="autorizado"?`<button class="btn sm w" data-act="nfe-cce" data-id="${p.id}">Carta de correção</button><button class="btn sm danger w" data-act="nfe-cancel" data-id="${p.id}">Cancelar NF-e</button>`:""}</div></div>`}
+async function nfeAtualizar(p,quieto){const n=p.nfe;if(!n||!n.ref)return;try{const r=await nfeCall({acao:"consultar",ref:n.ref});const d=r.dados||{};
+    const u=Object.assign({},n,{status:d.status||n.status,mensagem:d.mensagem_sefaz||(d.erros&&d.erros.map(e=>e.mensagem).join("; "))||d.mensagem||n.mensagem||"",numero:d.numero||n.numero||"",serie:d.serie||n.serie||"",chave:d.chave_nfe||n.chave||"",danfe:d.caminho_danfe||n.danfe||"",xml:d.caminho_xml_nota_fiscal||n.xml||"",xmlCanc:d.caminho_xml_cancelamento||n.xmlCanc||"",cce:d.caminho_pdf_carta_correcao||n.cce||"",atualizadoEm:new Date().toISOString()});
+    await S.db.doc("pedidos/"+p.id).update({nfe:u});return u}catch(err){if(!quieto)toast(String(err.message||err),true)}}
+async function nfeAcompanhar(id){for(let k=0;k<15;k++){await new Promise(r=>setTimeout(r,3000));const p=S.all.find(x=>x.id===id);if(!p||!p.nfe)return;const u=await nfeAtualizar(p,true);if(u&&u.status!=="processando_autorizacao"){toast(u.status==="autorizado"?"NF-e "+u.numero+" autorizada":"NF-e: "+(NFE_ST[u.status]||[u.status])[0],u.status!=="autorizado");return}}}
+async function nfeForm(id){const p=S.all.find(x=>x.id===id);if(!p)return;if(!S.isAdmin)return toast("Só o gestor emite notas.",true);const b=nfePode(p);if(b)return toast(b,true);
+  const c=p.clienteId&&cliBy(p.clienteId);const falta=nfeChecar(p,c);const amb=await nfeAmbiente();
+  const temFrete=(+p.frete||0)+(+p.outros||0)>0;const ent=(p.entrega||{}).tipo;
+  openModal(`<div class="panel-h"><h3>Emitir NF-e · pedido ${esc(numFmt(p.numero))}</h3>${amb==="producao"?'<span class="pill bad">PRODUÇÃO · nota real</span>':'<span class="pill warn">HOMOLOGAÇÃO · teste sem valor fiscal</span>'}</div>
+  <form id="f-nfe" class="panel-b" style="display:flex;flex-direction:column;gap:12px" autocomplete="off">
+    ${falta.length?`<div class="gate bad"><b>Antes de emitir, corrija:</b><ul style="margin:6px 0 0 18px;padding:0">${falta.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:""}
+    ${c?`<div class="small"><span class="eyebrow">Destinatário</span><br><b>${esc(c.nome)}</b> · ${esc(c.documento||"sem CPF/CNPJ")}<br>${esc(endCli(c))}${c.cidadeConferir?' <span class="pill warn">cidade a conferir</span>':""}</div>`:""}
+    <div class="grid2">
+      ${c&&soDig(c.documento).length===14?`<label class="f">Inscrição estadual do cliente<input id="nf-ie" value="${esc(soDig(c.rgie))}" placeholder="vazio = não contribuinte"></label>`:""}
+      <label class="f">Transportadora<select id="nf-tr"><option value="">Sem transportadora</option>${Object.entries(NFE_TRANSP).map(([k,t])=>`<option value="${k}" ${ent==="transportadora"&&k==="braspress"?"selected":""}>${esc(t.nome)}</option>`).join("")}</select></label>
+      <label class="f">Frete por conta<select id="nf-mf"><option value="0" ${temFrete||ent==="transportadora"||ent==="correios"?"selected":""}>0 · Emitente (ACL)</option><option value="1">1 · Destinatário (cliente)</option><option value="9" ${!temFrete&&ent!=="transportadora"&&ent!=="correios"?"selected":""}>9 · Sem frete</option></select></label>
+      <label class="f">Volumes (qtd)<input id="nf-vq" type="number" min="0" value="1"></label>
+      <label class="f">Espécie<input id="nf-ve" value="VOLUME" list="dl-esp"></label>
+      <label class="f">Peso bruto (kg)<input id="nf-pb" type="number" min="0" step="0.01"></label>
+      <label class="f">Peso líquido (kg)<input id="nf-pl" type="number" min="0" step="0.01"></label></div>
+    <label class="f">Observação na nota (opcional)<input id="nf-obs" value="${esc((p.obsNota||"").slice(0,300))}" placeholder="Ex.: projeto, ordem de compra do cliente"></label>
+    <div class="small muted">Valor da nota ${brl.format(totalDe(p))}${temFrete?" (frete e outros entram em “outras despesas”, como no JOB)":""}. CFOP ${c&&(c.uf||"").toUpperCase()!==nfeFisc().ufEmit?"6.101":"5.101"}, CSOSN 102.</div>
+    <div class="foot"><button type="button" class="btn" data-act="close">Voltar</button><button class="btn primary" type="submit" ${falta.length?"disabled":""}>${amb==="producao"?"Emitir nota":"Emitir nota de teste"}</button></div></form>
+    <datalist id="dl-esp"><option value="VOLUME"><option value="PACOTE"><option value="CAIXA"><option value="PEÇAS"><option value="UNIDADES"></datalist>`);
+  $("#f-nfe").addEventListener("submit",async e=>{e.preventDefault();const bt=e.submitter||$("#f-nfe button[type=submit]");bt.disabled=true;bt.textContent="Enviando…";
+    try{let cc=Object.assign({},c);if(!cc.ibge){const r=await buscaCep(cc.cep);if(r&&r.ibge){cc.ibge=r.ibge;cc.cidade=r.cidade;cc.uf=r.uf;try{await S.db.doc("clientes/"+c.id).update({ibge:r.ibge,cidade:r.cidade,uf:r.uf,cidadeConferir:false})}catch(x){}}}
+      const ie=$("#nf-ie")?$("#nf-ie").value.trim():"";if(ie&&soDig(ie)!==soDig(c.rgie)){try{await S.db.doc("clientes/"+c.id).update({rgie:ie})}catch(x){}}
+      const o={ie,transp:$("#nf-tr").value,modFrete:+$("#nf-mf").value,volQtd:$("#nf-vq").value,volEsp:$("#nf-ve").value.trim().toUpperCase(),pesoB:$("#nf-pb").value,pesoL:$("#nf-pl").value,obs:$("#nf-obs").value.trim(),vendedor:(vnome(vkey(p))||"").toUpperCase().replace("NÃO INFORMADO","")};
+      const nota=nfeMontar(p,cc,o,amb);const tent=((p.nfeHist||[]).length+(p.nfe?1:0))+1;const ref="ped"+soDig(p.numero)+"-"+p.id.slice(0,6).replace(/[^A-Za-z0-9]/g,"")+"-"+tent;
+      const r=await nfeCall({acao:"emitir",ref,nota});const d=r.dados||{};
+      const hist=(p.nfeHist||[]).concat(p.nfe?[p.nfe]:[]).slice(-20);
+      const nfe={ref,ambiente:r.ambiente,status:d.status||(r.status<300?"processando_autorizacao":"erro_autorizacao"),mensagem:d.mensagem||(d.erros&&d.erros.map(x=>x.mensagem).join("; "))||"",em:new Date().toISOString(),por:S.uid||"",valor:nota.valor_total};
+      await S.db.doc("pedidos/"+p.id).update({nfe,nfeHist:hist,obsNota:o.obs});
+      toast(nfe.status==="erro_autorizacao"?"A Focus recusou: "+nfe.mensagem:"Nota enviada. Aguardando a SEFAZ…",nfe.status==="erro_autorizacao");detalhe(p.id);if(nfe.status!=="erro_autorizacao")nfeAcompanhar(p.id)}
+    catch(err){toast(String(err.message||err),true);bt.disabled=false;bt.textContent="Tentar de novo"}})}
+function nfeCancelForm(id){const p=S.all.find(x=>x.id===id);if(!p||!p.nfe)return;
+  openModal(`<div class="panel-h"><h3>Cancelar NF-e ${esc(p.nfe.numero||"")}</h3></div><form id="f-nc" class="panel-b" style="display:flex;flex-direction:column;gap:12px"><div class="small muted">O cancelamento só é aceito pela SEFAZ até 24 horas depois da autorização e se a mercadoria ainda não circulou. Depois disso, fale com o contador.</div>
+    <label class="f">Motivo do cancelamento (mínimo 15 letras)<input id="nc-j" minlength="15" maxlength="255" required placeholder="Ex.: pedido cancelado pelo cliente antes do envio"></label>
+    <div class="foot"><button type="button" class="btn" data-act="close">Voltar</button><button class="btn danger" type="submit">Cancelar a nota</button></div></form>`);
+  $("#f-nc").addEventListener("submit",async e=>{e.preventDefault();const j=$("#nc-j").value.trim();if(j.length<15)return toast("Escreva um motivo com pelo menos 15 letras.",true);const bt=e.submitter;bt.disabled=true;
+    try{const r=await nfeCall({acao:"cancelar",ref:p.nfe.ref,justificativa:j});const d=r.dados||{};if(d.status==="cancelado"){await S.db.doc("pedidos/"+p.id).update({nfe:Object.assign({},p.nfe,{status:"cancelado",mensagem:d.mensagem_sefaz||"Cancelada",xmlCanc:d.caminho_xml_cancelamento||"",canceladaEm:new Date().toISOString(),motivoCanc:j})});toast("NF-e cancelada");detalhe(p.id)}
+      else{toast("A SEFAZ não aceitou: "+(d.mensagem_sefaz||d.mensagem||JSON.stringify(d)),true);bt.disabled=false}}catch(err){toast(String(err.message||err),true);bt.disabled=false}})}
+function nfeCceForm(id){const p=S.all.find(x=>x.id===id);if(!p||!p.nfe)return;
+  openModal(`<div class="panel-h"><h3>Carta de correção · NF-e ${esc(p.nfe.numero||"")}</h3></div><form id="f-cc" class="panel-b" style="display:flex;flex-direction:column;gap:12px"><div class="small muted">Serve para corrigir dados que não mudam valor, quantidade, preço nem quem é o cliente (ex.: endereço, transportadora, descrição). Cada nova carta substitui a anterior, então escreva a correção completa.</div>
+    <label class="f">Correção (mínimo 15 letras)<textarea id="cc-t" rows="4" minlength="15" maxlength="1000" required></textarea></label>
+    <div class="foot"><button type="button" class="btn" data-act="close">Voltar</button><button class="btn primary" type="submit">Enviar carta de correção</button></div></form>`);
+  $("#f-cc").addEventListener("submit",async e=>{e.preventDefault();const t=$("#cc-t").value.trim();if(t.length<15)return toast("Escreva pelo menos 15 letras.",true);const bt=e.submitter;bt.disabled=true;
+    try{const r=await nfeCall({acao:"cce",ref:p.nfe.ref,correcao:t});const d=r.dados||{};if(d.status==="autorizado"){await S.db.doc("pedidos/"+p.id).update({nfe:Object.assign({},p.nfe,{cce:d.caminho_pdf_carta_correcao||"",cceTexto:t,cceEm:new Date().toISOString()})});toast("Carta de correção registrada");detalhe(p.id)}
+      else{toast("Não aceita: "+(d.mensagem_sefaz||d.mensagem||JSON.stringify(d)),true);bt.disabled=false}}catch(err){toast(String(err.message||err),true);bt.disabled=false}})}
 function cliForm(id){const c=id?cliBy(id):{tipo:"decorador"};const st=id&&statsCli()[id];const ps=id?S.ped.filter(p=>p.clienteId===id).sort((a,b)=>dataVenda(b).localeCompare(dataVenda(a))):[];const back=S.modal&&S.modal.live?null:document.querySelector("#novo-box #f-v")?true:null;
   const box=document.createElement("div");
   openModal(`<div class="panel-h"><h3>${id?esc(c.codigo||"")+" · "+esc(c.nome):"Novo cliente"}</h3>${st?`<span class="small muted">${st.n} pedido(s) · ${brl.format(st.tot)} · ticket ${brl.format(st.tot/st.n)}</span>`:""}</div>
@@ -1590,8 +1689,8 @@ function cliForm(id){const c=id?cliBy(id):{tipo:"decorador"};const st=id&&statsC
 /* ---------- CEP e importação de clientes do JOB ---------- */
 let VIACEP_OFF=0;
 async function buscaCep(cep){const d=String(cep||"").replace(/\D/g,"");if(d.length!==8)return null;const f=d.slice(0,5)+"-"+d.slice(5);
-  const get=async(u,ms)=>{const r=await fetch(u,{signal:AbortSignal.timeout(ms)});if(!r.ok)throw 0;return r.json()};
-  if(VIACEP_OFF<3){try{const j=await get("https://viacep.com.br/ws/"+d+"/json/",4000);VIACEP_OFF=0;if(j&&!j.erro)return{cep:f,cidade:j.localidade,uf:j.uf,ibge:j.ibge,rua:j.logradouro,bairro:j.bairro}}catch(e){VIACEP_OFF++}}
+  const get=async(u,ms)=>{const r=await fetch(u,{signal:AbortSignal.timeout(ms)});if(!r.ok)throw{http:r.status};return r.json()};
+  if(VIACEP_OFF<3){try{const j=await get("https://viacep.com.br/ws/"+d+"/json/",4000);VIACEP_OFF=0;if(j&&!j.erro)return{cep:f,cidade:j.localidade,uf:j.uf,ibge:j.ibge,rua:j.logradouro,bairro:j.bairro}}catch(e){if(!(e&&e.http&&e.http<500))VIACEP_OFF++}}
   try{const j=await get("https://opencep.com/v1/"+d,6000);if(j&&j.localidade)return{cep:f,cidade:j.localidade,uf:j.uf,ibge:j.ibge||"",rua:j.logradouro||"",bairro:j.bairro||""}}catch(e){}
   try{const j=await get("https://brasilapi.com.br/api/cep/v2/"+d,6000);if(j&&j.city)return{cep:f,cidade:j.city,uf:j.state,ibge:"",rua:j.street||"",bairro:j.neighborhood||""}}catch(e){}
   return null}
@@ -2272,6 +2371,10 @@ document.addEventListener("click",async e=>{if(e.target.closest&&e.target.closes
     case"orc-doc":await baixar("orcamento-"+p.orcNumero+".html",docHtml(p,true,await logoData()));break;
     case"ped-doc":await baixar("pedido-"+numFmt(p.numero)+".html",docHtml(p,false,await logoData()));break;
     case"fin-ok":finForm(id);break;
+    case"nfe-emitir":await nfeForm(id);break;
+    case"nfe-atual":{a.disabled=true;const u=await nfeAtualizar(p);if(u)toast("Situação: "+(NFE_ST[u.status]||[u.status])[0]);break}
+    case"nfe-cancel":nfeCancelForm(id);break;
+    case"nfe-cce":nfeCceForm(id);break;
     case"ficha":await baixar("pasta-"+numFmt(p.numero)+".html",fichaHtml(p));break;
     case"tog":{const k=a.dataset.k;const v=!(p[k]&&p[k].ok);a.disabled=true;await salvar(p,{[k]:{ok:v,em:new Date().toISOString(),por:S.uid||"",forcado:k==="material"&&v}},k==="arte"?"desenv":k==="pagamento"?"vendas":"pcp",v?k:k+"_x");toast(v?"Confirmado":"Desmarcado");break}
     case"liberar":{const v=a.dataset.v==="1";if(v&&!liberacao(p).every(x=>x.ok))return toast("Ainda falta item da liberação.",true);a.disabled=true;await salvar(p,{liberado:{ok:v,em:new Date().toISOString(),por:S.uid||""},status:v?"producao":"aguardando"},"pcp",v?"liberado":"bloqueado");try{if(v)await baixarEstoque(p);else await estornarEstoque(p)}catch(err){toast("Liberação registrada, mas a baixa no estoque falhou: "+errMsg(err),true)}toast(v?"Pedido "+p.numero+" liberado para produção":"Liberação cancelada");break}
