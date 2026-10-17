@@ -1420,9 +1420,9 @@ function vendaForm(id,fase,opts){opts=opts||{};const page=!!opts.target;const dr
       <label class="f">Observações internas (só na pasta da produção)<textarea id="fv-oint" rows="4">${esc(p.obsInterna||"")}</textarea></label>
     </div>
 
-    <fieldset class="sec"><legend>Mídias: arte, referência do cliente, comprovante</legend>
-      <div class="mids" id="fv-mids"></div>
-      <div id="fv-midup"></div>
+    <fieldset class="sec"><legend>Arquivos do cliente</legend>
+      <div class="small muted">Artes, referências e comprovantes do cliente não são anexados no sistema: salve na pasta compartilhada do Desenvolvimento, como hoje.</div>
+      <div hidden><div class="mids" id="fv-mids"></div><div id="fv-midup"></div></div>
     </fieldset>
 
     <div class="foot sticky-foot">${!novo&&!isO&&p.status!=="cancelado"&&p.status!=="enviado"?`<button type="button" class="btn danger left w" data-act="cancelar" data-id="${id}">Cancelar pedido</button>`:""}${!novo&&!isO&&p.status==="cancelado"?`<button type="button" class="btn left w" data-act="reabrir" data-id="${id}">Reabrir pedido</button>`:""}<span class="tfoot num" id="fv-tot2"></span>${page?`<button type="button" class="btn" data-act="novo-reset">Limpar</button>`:`<button type="button" class="btn" data-act="close">Fechar</button>`}<button class="btn primary w" type="submit" style="padding:12px 22px;font-size:1rem">${novo?(isO?"Salvar orçamento":"Fechar pedido"):"Salvar alterações"}</button></div>
