@@ -1295,7 +1295,7 @@ function itemCard(i){i=i||{qtd:1,un:"UN",linha:"confeccao"};const pr=i.produtoId
   <div class="ic-r2">
     <label class="f">Complemento (sai no pedido): cores, tema, nomes, detalhes<textarea class="it-comp" rows="2">${esc(i.complemento||"")}</textarea></label>
     <label class="f">Observação interna (só para a produção)<textarea class="it-oi" rows="2">${esc(i.obsInterna||"")}</textarea></label>
-    <div class="ic-side"><label class="f">Linha de produção<select class="it-l" disabled title="A linha vem do cadastro do produto">${LINHAS.map(l=>`<option value="${l.id}" ${l.id===i.linha?"selected":""}>${esc(l.nome)}</option>`).join("")}</select></label><label class="f">Acabamento<select class="it-ac"><option value="">Sem acabamento</option>${[...new Set(acabamentos().concat(i.acabamento?[i.acabamento]:[]))].map(a=>`<option ${a===i.acabamento?"selected":""}>${esc(a)}</option>`).join("")}</select></label><label class="f">Detalhe do acabamento<input class="it-acd" value="${esc(i.acabamentoObs||"")}" placeholder="Ex.: ilhós a cada 50 cm, passante de 5 cm em cima"></label><label class="chk small"><input type="checkbox" class="it-b" ${i.brinde?"checked":""}> Brinde (sem custo)</label></div>
+    <div class="ic-side"><label class="f">Linha de produção <span class="small muted">(vem do cadastro)</span><select class="it-l" disabled title="A linha vem do cadastro do produto" style="appearance:none;-webkit-appearance:none;border:0;background:transparent;padding-left:0;color:inherit;font-weight:700;opacity:1;pointer-events:none">${LINHAS.map(l=>`<option value="${l.id}" ${l.id===i.linha?"selected":""}>${esc(l.nome)}</option>`).join("")}</select></label><label class="f">Acabamento<select class="it-ac"><option value="">Sem acabamento</option>${[...new Set(acabamentos().concat(i.acabamento?[i.acabamento]:[]))].map(a=>`<option ${a===i.acabamento?"selected":""}>${esc(a)}</option>`).join("")}</select></label><label class="f">Detalhe do acabamento<input class="it-acd" value="${esc(i.acabamentoObs||"")}" placeholder="Ex.: ilhós a cada 50 cm, passante de 5 cm em cima"></label><label class="chk small"><input type="checkbox" class="it-b" ${i.brinde?"checked":""}> Brinde (sem custo)</label></div>
   </div></div>`}
 /* ===== VENDA POR MEDIDA (m²) =====
    O produto é o modelo (ex.: Painel redondo). Preço por m² sobre a medida do produto;
@@ -1384,7 +1384,7 @@ function vendaForm(id,fase,opts){opts=opts||{};const page=!!opts.target;const dr
     </div>
 
     <fieldset class="sec"><legend>Cliente</legend>
-      <label class="f">Código ou nome<input id="fv-cli" list="dl-cli" required value="${esc(c?cliLabel(c):p.cliente||"")}" placeholder="Digite o código (ex.: 010203) ou o nome; se for novo, o cadastro abre aqui"></label>
+      <label class="f" style="position:relative">Código ou nome<input id="fv-cli" autocomplete="off" required value="${esc(c?cliLabel(c):p.cliente||"")}" placeholder="Digite o código (ex.: 010203) ou o nome; se for novo, o cadastro abre aqui"><div id="fv-cli-sug" hidden style="position:absolute;z-index:60;left:0;right:0;top:100%;background:#fff;color:#111;border:1px solid #bbb;border-radius:8px;max-height:320px;overflow:auto;box-shadow:0 8px 22px rgba(0,0,0,.18)"></div></label>
       <div id="fv-clibox"></div></fieldset>
 
     <fieldset class="sec"><legend>Itens do pedido</legend>
@@ -1428,7 +1428,7 @@ function vendaForm(id,fase,opts){opts=opts||{};const page=!!opts.target;const dr
     <div class="foot sticky-foot">${!novo&&!isO&&p.status!=="cancelado"&&p.status!=="enviado"?`<button type="button" class="btn danger left w" data-act="cancelar" data-id="${id}">Cancelar pedido</button>`:""}${!novo&&!isO&&p.status==="cancelado"?`<button type="button" class="btn left w" data-act="reabrir" data-id="${id}">Reabrir pedido</button>`:""}<span class="tfoot num" id="fv-tot2"></span>${page?`<button type="button" class="btn" data-act="novo-reset">Limpar</button>`:`<button type="button" class="btn" data-act="close">Fechar</button>`}<button class="btn primary w" type="submit" style="padding:12px 22px;font-size:1rem">${novo?(isO?"Salvar orçamento":"Fechar pedido"):"Salvar alterações"}</button></div>
   </form>
   <datalist id="dl-prod">${S.prod.filter(vendavel).map(x=>`<option value="${esc(prodLabel(x))}">`).join("")}</datalist>
-  <datalist id="dl-cli">${S.cli.map(x=>`<option value="${esc(cliLabel(x))}">`).join("")}</datalist>`;
+  `;
   let R;if(page){R=opts.target;R.innerHTML=html}else{openModal(html);R=$("#sheet")}
   const q=s=>R.querySelector(s);
   let pular=new Set(p.pular||[]);
@@ -1496,6 +1496,16 @@ function vendaForm(id,fase,opts){opts=opts||{};const page=!!opts.target;const dr
   q("#fv-disse").addEventListener("change",e=>q("#fv-disse-w").hidden=!e.target.checked);
   if(!isO)q("#fv-rota").addEventListener("change",e=>{const c2=e.target.closest("[data-step]");if(c2){c2.checked?pular.delete(c2.dataset.step):pular.add(c2.dataset.step)}});
   q("#fv-cli").addEventListener("input",cliBox);q("#fv-cli").addEventListener("change",cliBox);
+  {const inp=q("#fv-cli"),sug=q("#fv-cli-sug");let tmr=0;
+    const fecha=()=>{sug.hidden=true;sug.innerHTML=""};
+    const busca=()=>{const v=norm(inp.value.trim());const dg=inp.value.replace(/\D/g,"");if(v.length<2&&dg.length<2){fecha();return}
+      const out=[];for(const x of S.cli){if(out.length>=12)break;const cod=String(x.codigo||"");if((dg&&dg.length===inp.value.trim().length&&cod.includes(dg))||norm(x.nome).includes(v)||norm(x.fantasia).includes(v))out.push(x)}
+      if(!out.length||(out.length===1&&cliLabel(out[0])===inp.value)){fecha();return}
+      sug.innerHTML=out.map(x=>`<div data-cid="${esc(x.id)}" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid #eee"><b>${esc(x.codigo||"")}</b> · ${esc(x.nome)}${x.fantasia?` <span style="color:#666">(${esc(x.fantasia)})</span>`:""}${x.cidade?` <span style="color:#666;font-size:.85em">· ${esc(x.cidade)}</span>`:""}</div>`).join("");sug.hidden=false};
+    inp.addEventListener("input",()=>{clearTimeout(tmr);tmr=setTimeout(busca,150)});
+    inp.addEventListener("blur",()=>setTimeout(fecha,200));
+    inp.addEventListener("keydown",e=>{if(e.key==="Escape")fecha()});
+    sug.addEventListener("mousedown",e=>{e.preventDefault();const d=e.target.closest("[data-cid]");if(!d)return;const x=S.cli.find(c=>c.id===d.dataset.cid);if(!x)return;inp.value=cliLabel(x);fecha();cliBox()});}
   if(page&&novo)q("#fv-fase").addEventListener("click",e=>{const b=e.target.closest("[data-f]");if(!b||b.dataset.f===fase)return;S.novoFase=b.dataset.f;vendaForm(null,b.dataset.f,{target:R,draft:{cliente:q("#fv-cli").value,itens:lerItens().length?lerItens():undefined,parcelas:lerParc(),obs:q("#fv-obs").value,obsInterna:q("#fv-oint").value,midias}})});
   cards().forEach(r=>{const pr=r.dataset.pid&&prodBy(r.dataset.pid);if(pr&&pr.medida){const pv=val(r,".it-p");updMed(r);if(!novo&&pv)r.querySelector(".it-p").value=pv}});recalc();cliBox();if(parcAuto||(novo&&pags2(p).length===1&&!pags2(p)[0].valor)){parcAuto=true;gerar()}
   q("#f-v").addEventListener("submit",async e=>{e.preventDefault();const btn=e.submitter||q("#f-v button[type=submit]");
@@ -2030,7 +2040,7 @@ async function baixar(nome,html){const dl=window.claude&&await window.claude.use
 function abrirNovo(fase,draft){if(S.view!=="novo")go("novo",true);S.novoFase=fase;vendaForm(null,fase,{target:$("#novo-box"),draft});window.scrollTo(0,0)}
 document.addEventListener("change",e=>{if(e.target&&e.target.id==="fv-vend")e.target.dataset.t="1";if(e.target&&e.target.id==="pcs-all")document.querySelectorAll(".pcs-c").forEach(c=>c.checked=e.target.checked)});
 function syncVendSelect(){document.querySelectorAll("#fv-vend-w").forEach(w=>{if(!vendAtivos().length)return;const sel=w.querySelector("#fv-vend");const cur=sel&&(sel.dataset.t||!vendPadrao())?sel.value:vendPadrao();const opts=vendAtivos(cur).map(v=>`<option value="${v.id}" ${v.id===cur?"selected":""}>${esc(v.nome)}</option>`).join("");if(sel){if(sel.innerHTML!==opts){sel.innerHTML=opts;sel.value=cur||sel.value}}else w.innerHTML="Vendedor<select id=\"fv-vend\">"+opts+"</select>"})}
-function renderNovoUlt(){syncVendSelect();const dp=S.prod.filter(vendavel).map(x=>`<option value="${esc(prodLabel(x))}">`).join(""),dc=S.cli.map(x=>`<option value="${esc(x.nome)}">`).join("");document.querySelectorAll("datalist#dl-prod").forEach(d=>{if(d.innerHTML!==dp)d.innerHTML=dp});document.querySelectorAll("datalist#dl-cli").forEach(d=>{if(d.innerHTML!==dc)d.innerHTML=dc});const l=S.all.slice().sort((a,b)=>String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0,8);
+function renderNovoUlt(){syncVendSelect();const dp=S.prod.filter(vendavel).map(x=>`<option value="${esc(prodLabel(x))}">`).join(""),dc="";document.querySelectorAll("datalist#dl-prod").forEach(d=>{if(d.innerHTML!==dp)d.innerHTML=dp});document.querySelectorAll("datalist#dl-cli").forEach(d=>{if(d.innerHTML!==dc)d.innerHTML=dc});const l=S.all.slice().sort((a,b)=>String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0,8);
   $("#novo-ult").innerHTML=l.length?`<table><tbody>${l.map(p=>`<tr class="click" ${p.fase==="orcamento"?`data-orc="${p.id}"`:`data-ped="${p.id}"`}><td>${p.fase==="orcamento"?`<span class="code">${esc(p.orcNumero)}</span>`:`<span class="ped">${esc(numFmt(p.numero))}</span>`}</td><td>${esc(p.cliente)}</td><td class="small muted">${fdh(p.criadoEm)}</td><td class="r num">${brl.format(totalDe(p))}</td><td>${p.fase==="orcamento"?orcPill(p):statusPill(p)}</td></tr>`).join("")}</tbody></table>`:`<div class="empty">Os pedidos e orçamentos que você lançar aparecem aqui.</div>`}
 
 /* ---------- modo TV ---------- */
