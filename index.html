@@ -885,13 +885,14 @@ function tercInfo(p){return tercLista(p)[0]||null}
 function tercCandidatos(p){const r=rotaDe(p);const out=[];(p.linhas||[]).forEach(lid=>{const L=linhaBy(lid);const rr=L.rota.filter(x=>r.includes(x));const prox=rr.find(x=>estado(p,x).st!=="concluido");if(prox&&TERC[prox]&&estado(p,prox).st!=="externo"&&!out.includes(prox))out.push(prox)});return out}
 const LINHAS=[
   {id:"confeccao",nome:"Confecção",rota:["impressao","transfer","corte","costura"]},
+  {id:"impressao",nome:"Impressão (impressão + transferência)",rota:["impressao","transfer"]},
   {id:"serralheria",nome:"Serralheria",rota:["serralheria"]},
   {id:"marcenaria",nome:"Marcenaria",rota:["marcenaria"]},
   {id:"display",nome:"Display (Marcenaria → Aplique)",rota:["marcenaria","aplique"]},
   {id:"aplique",nome:"Aplique",rota:["aplique"]},
   {id:"personalizados",nome:"Personalizados",rota:["personalizados"]}];
 const linhaBy=id=>LINHAS.find(l=>l.id===id)||{id:"",nome:"—",rota:[]};
-const AREAS={"@conf":{nome:"Área Confecção",linhas:["confeccao","personalizados"]},"@estr":{nome:"Área Serralheria / Marcenaria",linhas:["serralheria","marcenaria","display","aplique"]}};
+const AREAS={"@conf":{nome:"Área Confecção",linhas:["confeccao","impressao","personalizados"]},"@estr":{nome:"Área Serralheria / Marcenaria",linhas:["serralheria","marcenaria","display","aplique"]}};
 const qLin=()=>!S.qLinha?null:S.qLinha[0]==="@"?(AREAS[S.qLinha]||{linhas:[]}).linhas:[S.qLinha];
 const linhaDe=(p,s)=>(p.linhas||[]).find(l=>linhaBy(l).rota.includes(s))||"";
 const ORIGENS=["CRM / WhatsApp","Instagram","Indicação","Loja / site","Mercado Livre","Shopee","TikTok Shop","Corporativo","Feira / evento","Outro"];
@@ -2362,7 +2363,7 @@ function analiseMaterial(p){const {nec,semComp,total}=necessidade(p);const linha
 function materialHtml(p,compacto){const A=analiseMaterial(p);if(!A.temComp)return `<div class="small muted">${A.total?"Nenhum produto deste pedido tem composição cadastrada; a conferência de material é manual.":""}</div>`;
   const jaBaixou=!!(p.baixaEstoque&&p.baixaEstoque.ids&&p.baixaEstoque.ids.length);
   return `<div class="tbl-wrap"><table><thead><tr><th>Insumo</th><th class="r">Precisa</th><th class="r">${jaBaixou?"Saldo após baixa":"Em estoque"}</th><th class="r">Falta</th>${compacto?"":'<th class="r">Custo</th>'}</tr></thead><tbody>${A.linhas.map(l=>`<tr><td>${l.i?esc(insLabel(l.i)):"insumo removido"}</td><td class="r num">${nq(l.precisa)} ${esc(l.i?l.i.unidade:"")}</td><td class="r num">${nq(l.disp)}</td><td class="r num">${jaBaixou?'<span class="pill ok">baixado</span>':l.falta>0?`<span class="pill bad">${nq(l.falta)}</span>`:'<span class="pill ok">ok</span>'}</td>${compacto?"":`<td class="r num">${brl.format(l.precisa*custoIns(l.id))}</td>`}</tr>`).join("")}</tbody></table></div>${A.semComp?`<div class="small muted">${A.semComp} item(ns) sem composição cadastrada ficam de fora da conta.</div>`:""}`}
-async function baixarEstoque(p){const A=analiseMaterial(p);if(!A.temComp||(p.baixaEstoque&&(p.baixaEstoque.ids||[]).length))return;const ids=[];const now=new Date().toISOString();const setorDe={confeccao:"Confecção",serralheria:"Serralheria",marcenaria:"Marcenaria",aplique:"Aplique"};
+async function baixarEstoque(p){const A=analiseMaterial(p);if(!A.temComp||(p.baixaEstoque&&(p.baixaEstoque.ids||[]).length))return;const ids=[];const now=new Date().toISOString();const setorDe={confeccao:"Confecção",impressao:"Impressão",serralheria:"Serralheria",marcenaria:"Marcenaria",aplique:"Aplique"};
   for(const l of A.linhas){const ref=await S.db.collection("movimentos").add({tipo:"saida",insumoId:l.id,qtd:l.precisa,setor:setorDe[(p.linhas||[])[0]]||"Confecção",pedido:numFmt(p.numero),obs:"Baixa automática na liberação do pedido",data:now,por:S.uid||"",auto:true,pedidoId:p.id});ids.push(ref.id)}
   await S.db.doc("pedidos/"+p.id).update({baixaEstoque:{ids,em:now,custo:r2(A.custo)}})}
 async function estornarEstoque(p){const ids=(p.baixaEstoque&&p.baixaEstoque.ids)||[];for(const id of ids)await S.db.doc("movimentos/"+id).delete();if(ids.length)await S.db.doc("pedidos/"+p.id).update({baixaEstoque:{ids:[],em:"",custo:0}})}
@@ -2504,7 +2505,7 @@ function usuSenhaForm(id){const x=(S.usuList||[]).find(u=>u.id===id);openModal(`
   $("#f-us").addEventListener("submit",async e=>{e.preventDefault();const bt=e.submitter;bt.disabled=true;try{await usuCall({acao:"senha",id,senha:$("#us-s").value});toast("Senha trocada");closeModal()}catch(err){toast(String(err.message||err),true);bt.disabled=false}})}
 async function resolveNamesIds(ids){if(!S.user||!S.user.profiles)return;const need=ids.filter(i=>!S.names[i]);if(!need.length)return;try{const ps=await S.user.profiles(need);let mud=false;Object.keys(ps||{}).forEach(i=>{if(!S.names[i]){S.names[i]=(ps[i]&&ps[i].name)||"Sem nome";mud=true}});if(mud&&S.view==="usu")renderUsu()}catch(e){}}
 /* ---------- pedido gera contas a receber no Financeiro ---------- */
-function centroDe(ls){ls=ls||[];if(ls.length&&ls.every(l=>l==="confeccao"||l==="aplique"))return"tecidos";if(ls.length&&ls.every(l=>l==="serralheria"||l==="marcenaria"))return"estruturas";return"compart"}
+function centroDe(ls){ls=ls||[];if(ls.length&&ls.every(l=>l==="confeccao"||l==="impressao"||l==="aplique"))return"tecidos";if(ls.length&&ls.every(l=>l==="serralheria"||l==="marcenaria"))return"estruturas";return"compart"}
 async function sincReceber(id,p){try{const snap=await S.db.collection("lancamentos").where("pedidoId","==",id).get();const ex=snap.docs.map(d=>Object.assign({id:d.id},d.data())).filter(l=>!l.excluido);
   if(ex.some(l=>l.status==="pago"||(l.pagamentos||[]).length))return"pago";
   const now=new Date().toISOString();
