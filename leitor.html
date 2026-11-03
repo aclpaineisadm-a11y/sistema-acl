@@ -75,8 +75,8 @@ body{font-family:Arial,sans-serif;background:#0f0f14;min-height:100vh;color:#e8e
 
 <script>
 (function(){
-const SETORES=[["vendas","Vendas"],["desenv","Desenvolvimento"],["pcp","PCP"],["impressao","Impressão"],["transfer","Transferência (calandra)"],["corte","Corte"],["costura","Costura"],["terceirizados","Terceirizados"],["serralheria","Serralheria"],["marcenaria","Marcenaria"],["aplique","Aplique"],["personalizados","Personalizados"],["expedicao","Expedição"]];
-const ANTIGOS={"desenvolvimento":"desenv","impressão":"impressao","impressao":"impressao","calandra":"transfer","transferência":"transfer","solda":"serralheria","acabamento":"serralheria","cnc router":"marcenaria","montagem":"marcenaria","display":"aplique","expedição":"expedicao"};
+const SETORES=[["vendas","Vendas"],["desenv","Desenvolvimento"],["pcp","PCP"],["impressao","Impressão"],["transfer","Transferência (calandra)"],["corte","Corte"],["costura","Costura"],["terceirizados","Terceirizados"],["terceirizacao","Terceirização"],["serralheria","Serralheria"],["marcenaria","Marcenaria"],["aplique","Aplique"],["personalizados","Personalizados"],["expedicao","Expedição"]];
+const ANTIGOS={"desenvolvimento":"desenv","impressão":"impressao","impressao":"impressao","calandra":"transfer","transferência":"transfer","solda":"serralheria","acabamento":"serralheria","cnc router":"marcenaria","montagem":"marcenaria","display":"aplique","expedição":"expedicao","terceirização":"terceirizacao","terceirizacao":"terceirizacao"};
 const sb=window.supabase.createClient(window.ACL_CFG.url,window.ACL_CFG.key,{auth:{persistSession:false}});
 const $=id=>document.getElementById(id);
 const bruto=(new URLSearchParams(location.search).get("setor")||"").trim();
