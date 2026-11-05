@@ -1179,7 +1179,7 @@ function renderResultado(){const box=$("#st-res");const p=S.atual&&S.ped.find(x=
   if(p.status==="cancelado")gate=`<div class="gate bad">Pedido cancelado. Não produzir.</div>`;
   else if(p.status==="enviado")gate=`<div class="gate ok">Pedido já enviado em ${fdh(p.enviadoEm)}.</div>`;
   else if(!s)gate=`<div class="gate warn">Escolha acima em qual setor este aparelho está.</div>`;
-  else if(s==="vendas"){gate=`<div class="gate ok">Pedido lançado. ${p.pagamento&&p.pagamento.ok?"Pagamento confirmado pelo Financeiro.":"Aguardando o Financeiro confirmar o pagamento."}</div>`;const ac=liberacao(p).find(x=>x.k==="aprovCliente");acts=`<button class="btn xl w" data-act="ped-doc" data-id="${p.id}">${((p.entrega||{}).tipo)==="retira"?"Imprimir pedido (cliente retira: imprimir e entregar)":"Baixar pedido para enviar ao cliente"}</button><button class="btn xl w" data-act="ficha" data-id="${p.id}">Pasta da produção com QR</button>${ac&&!ac.auto?`<button class="btn xl ${ac.ok?"ghost":"go"} w" data-act="tog" data-k="aprovCliente" data-id="${p.id}">${ac.ok?"Desfazer: cliente aprovou":"Cliente aprovou o pedido"}</button>`:""}`}
+  else if(s==="vendas"){gate=`<div class="gate ok">Pedido lançado. ${p.pagamento&&p.pagamento.ok?"Pagamento confirmado pelo Financeiro.":"Aguardando o Financeiro confirmar o pagamento."}</div>`;const ac=liberacao(p).find(x=>x.k==="aprovCliente");acts=`<button class="btn xl w" data-act="ped-doc" data-id="${p.id}">${((p.entrega||{}).tipo)==="retira"?"Imprimir pedido (cliente retira: imprimir e entregar)":"Pedido para o cliente (imprimir ou salvar em PDF)"}</button><button class="btn xl w" data-act="ficha" data-id="${p.id}">Pasta da produção com QR</button>${ac&&!ac.auto?`<button class="btn xl ${ac.ok?"ghost":"go"} w" data-act="tog" data-k="aprovCliente" data-id="${p.id}">${ac.ok?"Desfazer: cliente aprovou":"Cliente aprovou o pedido"}</button>`:""}`}
   else if(s==="financeiro"){const pg=p.pagamento&&p.pagamento.ok;gate=pg?`<div class="gate ok">Pagamento confirmado${p.pagamento.tipo==="sinal"?" (sinal de "+brl.format(+p.pagamento.valor||0)+")":""} em ${fdh(p.pagamento.em)}.</div>`:`<div class="gate warn">Pagamento ainda não confirmado.${p.clienteDissePago?" O cliente informou que já pagou: "+esc(p.comprovanteObs||""):""}</div>`;acts=pg?`<button class="btn xl ghost w" data-act="tog" data-k="pagamento" data-id="${p.id}">Desfazer confirmação</button>`:`<button class="btn xl go w" data-act="fin-ok" data-id="${p.id}">Confirmar recebimento</button>`}
   else if(s==="desenv"){if(!p.arteNecessaria)gate=`<div class="gate ok">Este pedido não precisa de arte.</div>`;else{const ok=p.arte&&p.arte.ok;const e=estado(p,"desenv").st;gate=ok?`<div class="gate ok">Arte aprovada pelo cliente.</div>`:`<div class="gate warn">Confira a pasta antes de começar. Se faltar informação, devolva ao Vendas.</div>`;
     acts=(e==="pendente"&&!ok?`<button class="btn xl w" data-act="mov" data-a="entrada" data-id="${p.id}">Recebi a pasta, iniciar arte</button>`:"")+(ok?"":`<button class="btn xl go w" data-act="tog" data-k="arte" data-id="${p.id}">Cliente aprovou a arte por escrito</button>`)+mockupUI(p)}}
@@ -1614,7 +1614,7 @@ function finForm(id){const p=S.ped.find(x=>x.id===id);if(!p)return;const t=total
 
 function orcDetalhe(id){let visto=false;const draw=()=>{const o=S.all.find(x=>x.id===id);if(!o){if(visto)closeModal();else $("#sheet").innerHTML='<div class="empty">Carregando…</div>';return}visto=true;
   if(o.fase!=="orcamento"){detalhe(id);return}const aberto=o.status==="aberto";
-  $("#sheet").innerHTML=`<div class="panel-h"><div><span class="eyebrow">Orçamento</span><div class="row" style="gap:12px"><span class="ped" style="font-size:1.8rem">${esc(o.orcNumero)}</span>${orcPill(o)}</div></div><div class="row"><button class="btn w" data-act="orc-doc" data-id="${id}">Baixar para enviar ao cliente</button>${aberto?`<button class="btn w" data-act="edit" data-id="${id}">Editar</button>`:""}<button class="btn ghost" data-act="close" aria-label="Fechar">✕</button></div></div>
+  $("#sheet").innerHTML=`<div class="panel-h"><div><span class="eyebrow">Orçamento</span><div class="row" style="gap:12px"><span class="ped" style="font-size:1.8rem">${esc(o.orcNumero)}</span>${orcPill(o)}</div></div><div class="row"><button class="btn w" data-act="orc-doc" data-id="${id}">Imprimir ou salvar PDF</button>${aberto?`<button class="btn w" data-act="edit" data-id="${id}">Editar</button>`:""}<button class="btn ghost" data-act="close" aria-label="Fechar">✕</button></div></div>
   <div class="panel-b" style="display:flex;flex-direction:column;gap:14px">
     <div class="grid2"><div><span class="eyebrow">Cliente</span><div>${esc(o.cliente)}</div><div class="small muted" style="user-select:all">${esc(o.contato||"")}</div></div><div><span class="eyebrow">Validade</span><div class="num ${o.validade&&o.validade<today()?"neg":""}">${fdy(o.validade)||"—"}</div></div><div><span class="eyebrow">Prazo de entrega</span><div class="num">${fdy(o.prazo)}</div></div><div><span class="eyebrow">Vendedor</span><div>${esc(vnome(vkey(o)))}</div></div></div>
     ${itensHtml(o,true)}
@@ -2209,6 +2209,10 @@ ${o.obs?`<div class="obs"><div class="l">Observações</div>${esc(o.obs)}</div>`
 async function baixar(nome,html){const dl=window.claude&&await window.claude.use("downloads").catch(()=>null);if(!dl)return toast("Não foi possível baixar aqui. Abra pelo navegador do computador.",true);
   try{await dl.save({filename:nome,data:html})}catch(err){if(err&&err.code&&!["cancelled","declined"].includes(err.code))toast("O download não foi concluído.",true)}}
 
+async function imprimir(html){let f=document.getElementById("print-frame");if(f)f.remove();f=document.createElement("iframe");f.id="print-frame";f.setAttribute("aria-hidden","true");f.style.cssText="position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";document.body.appendChild(f);
+  await new Promise(r=>{f.onload=r;f.srcdoc=html});const d=f.contentDocument;
+  await Promise.all([...d.images].map(im=>im.complete?0:new Promise(r=>{im.onload=im.onerror=r;setTimeout(r,4000)})));try{await d.fonts.ready}catch(e){}
+  await new Promise(r=>setTimeout(r,150));try{f.contentWindow.focus();f.contentWindow.print()}catch(e){toast("Não foi possível abrir a impressão.",true)}}
 /* ---------- tirar pedido ---------- */
 function abrirNovo(fase,draft){if(S.view!=="novo")go("novo",true);S.novoFase=fase;vendaForm(null,fase,{target:$("#novo-box"),draft});window.scrollTo(0,0)}
 document.addEventListener("change",e=>{if(e.target&&e.target.id==="fv-vend")e.target.dataset.t="1";if(e.target&&e.target.id==="pcs-all")document.querySelectorAll(".pcs-c").forEach(c=>c.checked=e.target.checked)});
@@ -2700,16 +2704,16 @@ document.addEventListener("click",async e=>{if(e.target.closest&&e.target.closes
     case"aprovar":aprovarForm(id);break;
     case"perder":perderForm(id);break;
     case"reabrir-orc":await salvar(p,{status:"aberto",motivo:"",motivoObs:"",perdidoEm:""},"vendas","reaberto_orc");toast("Orçamento reaberto");break;
-    case"orc-doc":await baixar("orcamento-"+p.orcNumero+".html",docHtml(p,true,await logoData()));break;
-    case"ped-doc":await baixar("pedido-"+numFmt(p.numero)+".html",docHtml(p,false,await logoData()));break;
+    case"orc-doc":await imprimir(docHtml(p,true,await logoData()));break;
+    case"ped-doc":await imprimir(docHtml(p,false,await logoData()));break;
     case"fin-ok":finForm(id);break;
     case"nfe-emitir":await nfeForm(id);break;
     case"nfe-atual":{a.disabled=true;const u=await nfeAtualizar(p);if(u)toast("Situação: "+(NFE_ST[u.status]||[u.status])[0]);break}
     case"nfe-cancel":nfeCancelForm(id);break;
     case"nfe-cce":nfeCceForm(id);break;
-    case"etq-pint":await baixar("etiquetas-pintura-"+numFmt(p.numero)+".html",etqPintHtml(p));break;
-    case"ficha-terc":await baixar("fichas-terceirizacao-"+numFmt(p.numero)+".html",fichaTercHtml(p,await logoData()));break;
-    case"ficha":await baixar("pasta-"+numFmt(p.numero)+".html",fichaHtml(p));break;
+    case"etq-pint":await imprimir(etqPintHtml(p));break;
+    case"ficha-terc":await imprimir(fichaTercHtml(p,await logoData()));break;
+    case"ficha":await imprimir(fichaHtml(p));break;
     case"tog":{const k=a.dataset.k;const v=!(p[k]&&p[k].ok);if(k==="arte"&&v&&(p.itens||[]).some(i=>i.grade&&!i.mockup))return toast("Anexe antes o mockup aprovado de cada camiseta: ele vai na ficha de terceirização.",true);a.disabled=true;await salvar(p,Object.assign({[k]:{ok:v,em:new Date().toISOString(),por:S.uid||"",forcado:k==="material"&&v}},k==="arte"&&p.arteNecessaria?{prazo:v?addUteis(today(),p.prazoArteDias||prazoItens(p)||7):(p.prazoArteDias?"":p.prazo||"")}:{}),k==="arte"?"desenv":k==="pagamento"||k==="aprovCliente"?"vendas":"pcp",v?k:k+"_x");toast(v?"Confirmado":"Desmarcado");break}
     case"liberar":{const v=a.dataset.v==="1";if(v&&!liberacao(p).every(x=>x.ok))return toast("Ainda falta item da liberação.",true);a.disabled=true;await salvar(p,{liberado:{ok:v,em:new Date().toISOString(),por:S.uid||""},status:v?"producao":"aguardando"},"pcp",v?"liberado":"bloqueado");try{if(v)await baixarEstoque(p);else await estornarEstoque(p)}catch(err){toast("Liberação registrada, mas a baixa no estoque falhou: "+errMsg(err),true)}toast(v?"Pedido "+p.numero+" liberado para produção":"Liberação cancelada");break}
     case"terc-envia":{const sx=a.dataset.s;const quem=($("#tc-quem")||{}).value||"";const prev=($("#tc-prev")||{}).value||"";a.disabled=true;
