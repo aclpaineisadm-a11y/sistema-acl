@@ -124,6 +124,7 @@ async function registrar(lido){
       '<div class="info-item"><div class="info-label">Cliente</div><div class="info-value">'+esc(data.cliente||"—")+'</div></div>'+
       '<div class="info-item"><div class="info-label">Prazo</div><div class="info-value">'+pz+' <span class="badge '+(urg?"badge-urgente":"badge-normal")+'">'+(urg?"Urgente":"Normal")+'</span></div></div></div>';
     if(!res){mostra("ok","Leitura recebida","O pedido vai aparecer em "+esc(nomeSetor)+" assim que o sistema estiver aberto no computador ou na TV.",grade);return}
+    if(/liberado para a Expedi/i.test(res)&&!/já/i.test(res)){mostra("ok","Liberado para a Expedição!","Pedido concluído em "+esc(nomeSetor)+". A Expedição já pode receber esta parte.",grade);return}
     if(/registrado em/i.test(res)&&!/já/i.test(res)){mostra("ok","Entrada registrada!","Pedido movido para "+esc(nomeSetor),grade);return}
     mostra("aviso","Não entrou neste setor",esc(res.replace(/^sem mudança \((.*)\)$/,"Nada mudou: $1.")),grade)}
   catch(e){$("processando").style.display="none";$("tela-iniciar").style.display="block";mostra("erro","Não consegui registrar","Tente de novo. Se continuar, mande um print desta tela.<br><small>("+esc((e&&(e.message||e.code))||String(e)).slice(0,160)+")</small>")}}
