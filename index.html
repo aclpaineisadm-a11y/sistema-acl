@@ -1193,7 +1193,7 @@ function renderResultado(){const box=$("#st-res");const p=S.atual&&S.ped.find(x=
   else if(s==="expedicao"){const pronto=prontoExp(p);const falt=(p.linhas||[]).filter(l=>!linhaFeita(p,l)).map(l=>linhaBy(l).nome);
     gate=!liberado(p)?`<div class="gate bad">Pedido não liberado pelo PCP.</div>`:pronto?`<div class="gate ok">Todas as linhas concluídas. Confira e embale.</div>`:`<div class="gate warn">Pedido incompleto: aguardando ${esc(falt.join(", "))}. Não enviar.</div>`;
     if(p.dataEvento){const dd=Math.round((new Date(p.dataEvento+"T12:00:00")-new Date(today()+"T12:00:00"))/864e5);gate+=`<div class="gate ${dd<=3?"bad":"warn"}">Data do evento: <b>${fdy(p.dataEvento)}</b> · ${dd<0?"já passou":dd===0?"é hoje":"faltam "+dd+(dd===1?" dia":" dias")}. Escolha a entrega (transportadora, correios…) que chega antes do evento.</div>`}
-    acts=pronto?`<button class="btn xl go w" data-act="enviar" data-id="${p.id}">Conferido, embalado e enviado</button>`:""}
+    acts=(pronto&&podeNF()&&p.fase!=="orcamento"?`<div style="flex:1 1 100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px">${nfeBox(p)}</div>`:"")+(pronto?`<button class="btn xl go w" data-act="enviar" data-id="${p.id}">Conferido, embalado e enviado</button>`:"")}
   else{const L=linhaDe(p,s)||SET[s].linha;
     if(!liberado(p))gate=`<div class="gate bad">PARE: pedido não liberado pelo PCP. Não produzir.</div>`;
     else if(!r.includes(s))gate=`<div class="gate bad">Este pedido não passa por ${esc(SET[s].nome)}. Confira se pegou a pasta certa.</div>`;
@@ -1692,7 +1692,7 @@ function nfeMontar(p,c,o,amb){const F=nfeFisc();const uf=(c.uf||"").toUpperCase(
   const cred=r2n(items.reduce((a,x)=>a+(x.icms_valor_credito_simples||0),0));const brs=v=>v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
   n.informacoes_adicionais_contribuinte=[o.vendedor?"Vendedor: "+o.vendedor:"","VENDA: "+p.numero+(o.obs?" | "+o.obs:""),"DOCUMENTO EMITIDO POR ME OU EPP OPTANTE PELO SIMPLES NACIONAL","NÃO GERA DIREITO A CRÉDITO FISCAL DE IPI",c101?"PERMITE O APROVEITAMENTO DO CRÉDITO DE ICMS NO VALOR DE R$ "+brs(cred)+"; CORRESPONDENTE À ALÍQUOTA DE "+brs(aliq)+"%, NOS TERMOS DO ART. 23 DA LC 123/2006":""].filter(Boolean).join(" | ").slice(0,2000);
   return n}
-function nfeBox(p){const bloq=nfePode(p);const n=p.nfe;const adm=S.isAdmin;
+function nfeBox(p){const bloq=nfePode(p);const n=p.nfe;const adm=podeNF();
   if(bloq&&!n)return `<div class="small"><span class="eyebrow">Nota fiscal</span><br><span class="muted">${esc(bloq)}</span></div>`;
   if(!n)return `<div class="small"><span class="eyebrow">Nota fiscal</span><br><span class="muted">Ainda não emitida.</span> ${adm?`<button class="btn sm primary w" data-act="nfe-emitir" data-id="${p.id}">Emitir NF-e</button>`:""}</div>`;
   const st=NFE_ST[n.status]||[n.status,"cinza"];const base=nfeBase(n.ambiente);
@@ -1706,7 +1706,7 @@ async function nfeAtualizar(p,quieto){const n=p.nfe;if(!n||!n.ref)return;try{con
     const u=Object.assign({},n,{status:d.status||n.status,mensagem:d.mensagem_sefaz||(d.erros&&d.erros.map(e=>e.mensagem).join("; "))||d.mensagem||n.mensagem||"",numero:d.numero||n.numero||"",serie:d.serie||n.serie||"",chave:d.chave_nfe||n.chave||"",danfe:d.caminho_danfe||n.danfe||"",xml:d.caminho_xml_nota_fiscal||n.xml||"",xmlCanc:d.caminho_xml_cancelamento||n.xmlCanc||"",cce:d.caminho_pdf_carta_correcao||n.cce||"",atualizadoEm:new Date().toISOString()});
     await S.db.doc("pedidos/"+p.id).update({nfe:u});return u}catch(err){if(!quieto)toast(String(err.message||err),true)}}
 async function nfeAcompanhar(id){for(let k=0;k<15;k++){await new Promise(r=>setTimeout(r,3000));const p=S.all.find(x=>x.id===id);if(!p||!p.nfe)return;const u=await nfeAtualizar(p,true);if(u&&u.status!=="processando_autorizacao"){toast(u.status==="autorizado"?"NF-e "+u.numero+" autorizada":"NF-e: "+(NFE_ST[u.status]||[u.status])[0],u.status!=="autorizado");return}}}
-async function nfeForm(id){const p=S.all.find(x=>x.id===id);if(!p)return;if(!S.isAdmin)return toast("Só o gestor emite notas.",true);const b=nfePode(p);if(b)return toast(b,true);
+async function nfeForm(id){const p=S.all.find(x=>x.id===id);if(!p)return;if(!podeNF())return toast("Só quem tem o acesso Nota fiscal emite notas.",true);const b=nfePode(p);if(b)return toast(b,true);
   const c=p.clienteId&&cliBy(p.clienteId);const falta=nfeChecar(p,c);const amb=await nfeAmbiente();
   const temFrete=(+p.frete||0)+(+p.outros||0)>0;const ent=(p.entrega||{}).tipo;
   openModal(`<div class="panel-h"><h3>Emitir NF-e · pedido ${esc(numFmt(p.numero))}</h3>${amb==="producao"?'<span class="pill bad">PRODUÇÃO · nota real</span>':'<span class="pill warn">HOMOLOGAÇÃO · teste sem valor fiscal</span>'}</div>
@@ -2601,7 +2601,8 @@ function vendForm(id){const v=id?vendBy(id):{ativo:true};const users=[...new Set
 }
 
 /* ---------- perfis ---------- */
-const PERFIS={vendas:"Vendas",financeiro:"Financeiro",pcp:"PCP / Produção",fabrica:"Setor da fábrica (só leitura do QR)",almox:"Compras / Almoxarifado"};
+const PERFIS={vendas:"Vendas",financeiro:"Financeiro",pcp:"PCP / Produção",fabrica:"Setor da fábrica (só leitura do QR)",almox:"Compras / Almoxarifado",nf:"Nota fiscal (emitir NF-e)"};
+const podeNF=()=>S.isAdmin||meusPerfis().includes("nf");
 const SETOR_PERFIS={vendas:["vendas"],fin:["financeiro"],prod:["pcp"],almox:["almox","pcp"],gestao:[]};
 S.usuarios={};S.acessos=[];S.perfilPronto=false;
 const meusPerfis=()=>((S.usuarios[S.uid]||{}).perfis)||[];
@@ -2615,7 +2616,7 @@ async function usuCall(body){if(!window.SB||!window.SB.functions)throw new Error
 async function usuCarregar(){try{const r=await usuCall({acao:"listar"});S.usuList=r.usuarios||[];S.usuList.forEach(u=>{S.names[u.id]=u.nome||u.usuario})}catch(e){S.usuErro=String(e.message||e)}if(S.view==="usu")renderUsu()}
 function renderUsu(){const box=$("#usu-tbl");if(!box||!S.isAdmin)return;if(!S.usuList&&!S.usuCarregando){S.usuCarregando=true;usuCarregar().finally(()=>{S.usuCarregando=false})}
   const L=S.usuList||[];const ids=[...new Set(L.map(u=>u.id).concat(Object.keys(S.usuarios)).concat(S.acessos.map(a=>a.id)))].filter(i=>i&&i!==S.uid);const byId=Object.fromEntries(L.map(u=>[u.id,u]));
-  $("#usu-leg").innerHTML=Object.keys(PERFIS).map(k=>`<b>${esc(PERFIS[k])}</b>: ${esc({vendas:"tirar pedido, orçamentos, clientes, consulta de produtos e análise",financeiro:"pagamentos a confirmar, contas, conciliação, fluxo e DRE",pcp:"painel de produção, liberação, pedidos, leitura e indicadores",fabrica:"só a tela de leitura do QR do setor",almox:"estoque, entradas e saídas, fornecedores, cotações e etiquetas"}[k])}`).join("<br>")+"<br><b>Gestor</b>: você vê tudo, inclusive a Gestão.";
+  $("#usu-leg").innerHTML=Object.keys(PERFIS).map(k=>`<b>${esc(PERFIS[k])}</b>: ${esc({vendas:"tirar pedido, orçamentos, clientes, consulta de produtos e análise",financeiro:"pagamentos a confirmar, contas, conciliação, fluxo e DRE",pcp:"painel de produção, liberação, pedidos, leitura e indicadores",fabrica:"só a tela de leitura do QR do setor",almox:"estoque, entradas e saídas, fornecedores, cotações e etiquetas",nf:"emitir, cancelar e corrigir notas fiscais (marque junto com o setor da pessoa: Expedição ou Financeiro)"}[k])}`).join("<br>")+"<br><b>Gestor</b>: você vê tudo, inclusive a Gestão.";
   if(!ids.length){box.innerHTML=`<div class="empty"><b>${S.usuList?"Ninguém além de você ainda":"Carregando…"}</b>${S.usuList?"Clique em <b>+ Novo usuário</b> para criar o acesso de cada pessoa ou setor.":""}${S.usuErro?`<div class="neg small">${esc(S.usuErro)}</div>`:""}</div>`;return}
   resolveNamesIds(ids.filter(i=>!byId[i]));
   box.innerHTML=`<table><thead><tr><th>Pessoa / setor</th>${Object.keys(PERFIS).map(k=>`<th>${esc(PERFIS[k].split(" (")[0])}</th>`).join("")}<th></th></tr></thead><tbody>${ids.map(id=>{const u=S.usuarios[id]||{perfis:[]};const pend=!S.usuarios[id];const x=byId[id];return `<tr data-uid="${esc(id)}"><td><b>${esc((x&&x.nome)||S.names[id]||"…")}</b>${x?`<div class="small muted">usuário: <span class="num" style="user-select:all">${esc(x.usuario||"")}</span>${x.ultimo?" · último acesso "+fdh(x.ultimo):" · ainda não entrou"}</div>`:""}${pend?' <span class="pill warn">sem setor</span>':""}</td>${Object.keys(PERFIS).map(k=>`<td><input type="checkbox" class="usu-p" data-p="${k}" ${u.perfis.includes(k)?"checked":""} aria-label="${esc(PERFIS[k])}" style="width:auto"></td>`).join("")}<td class="r" style="white-space:nowrap"><button class="btn sm primary" data-act="usu-salvar" data-id="${esc(id)}">Salvar</button> ${x?`<button class="btn sm" data-act="usu-senha" data-id="${esc(id)}">Trocar senha</button> <button class="btn sm danger" data-act="usu-rem" data-id="${esc(id)}">Remover</button>`:""}</td></tr>`}).join("")}</tbody></table>`}
