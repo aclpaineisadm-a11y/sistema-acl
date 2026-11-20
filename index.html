@@ -2241,10 +2241,19 @@ ${o.obs?`<div class="obs"><div class="l">Observações</div>${esc(o.obs)}</div>`
 async function baixar(nome,html){const dl=window.claude&&await window.claude.use("downloads").catch(()=>null);if(!dl)return toast("Não foi possível baixar aqui. Abra pelo navegador do computador.",true);
   try{await dl.save({filename:nome,data:html})}catch(err){if(err&&err.code&&!["cancelled","declined"].includes(err.code))toast("O download não foi concluído.",true)}}
 
-async function imprimir(html){let f=document.getElementById("print-frame");if(f)f.remove();f=document.createElement("iframe");f.id="print-frame";f.setAttribute("aria-hidden","true");f.style.cssText="position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";document.body.appendChild(f);
-  await new Promise(r=>{f.onload=r;f.srcdoc=html});const d=f.contentDocument;
+async function imprimir(html){let f=document.getElementById("print-frame");if(f)f.remove();const old=document.getElementById("prev-ov");if(old)old.remove();
+  const css='<style id="prev-css">@media screen{html{background:#8f8f8f}body{background:#fff;max-width:210mm;margin:8mm auto!important;padding:9mm!important;box-shadow:0 2px 10px rgba(0,0,0,.45)}}</style>';
+  const doc=/<\/head>/i.test(html)?html.replace(/<\/head>/i,css+"</head>"):css+html;
+  const ov=document.createElement("div");ov.id="prev-ov";ov.style.cssText="position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;background:#8f8f8f";
+  ov.innerHTML='<div style="display:flex;gap:10px;align-items:center;padding:8px 14px;background:#fff;border-bottom:1px solid #ccc;box-shadow:0 1px 4px rgba(0,0,0,.15)"><b style="flex:1;font-size:15px">Prévia da impressão</b><button type="button" class="btn go" id="prev-print">Imprimir (F3)</button><button type="button" class="btn" id="prev-close">Fechar (Esc)</button></div><div id="prev-wait" style="padding:30px;text-align:center;color:#fff">Preparando…</div>';
+  f=document.createElement("iframe");f.id="print-frame";f.title="Prévia da impressão";f.style.cssText="flex:1;width:100%;border:0;background:#8f8f8f";ov.appendChild(f);document.body.appendChild(ov);
+  const fechar=()=>{document.removeEventListener("keydown",tecla,true);ov.remove()};
+  const imp=()=>{try{f.contentWindow.focus();f.contentWindow.print()}catch(e){toast("Não foi possível abrir a impressão.",true)}};
+  const tecla=e=>{if(e.key==="Escape"){e.preventDefault();fechar()}else if(e.key==="F3"||((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="p")){e.preventDefault();imp()}};
+  document.addEventListener("keydown",tecla,true);ov.querySelector("#prev-close").onclick=fechar;ov.querySelector("#prev-print").onclick=imp;
+  await new Promise(r=>{f.onload=r;f.srcdoc=doc});const d=f.contentDocument;
   await Promise.all([...d.images].map(im=>im.complete?0:new Promise(r=>{im.onload=im.onerror=r;setTimeout(r,4000)})));try{await d.fonts.ready}catch(e){}
-  await new Promise(r=>setTimeout(r,150));try{f.contentWindow.focus();f.contentWindow.print()}catch(e){toast("Não foi possível abrir a impressão.",true)}}
+  const w=ov.querySelector("#prev-wait");if(w)w.remove();try{d.addEventListener("keydown",tecla,true)}catch(e){}ov.querySelector("#prev-print").focus()}
 /* ---------- tirar pedido ---------- */
 function abrirNovo(fase,draft){if(S.view!=="novo")go("novo",true);S.novoFase=fase;vendaForm(null,fase,{target:$("#novo-box"),draft});window.scrollTo(0,0)}
 document.addEventListener("change",e=>{if(e.target&&e.target.id==="fv-vend")e.target.dataset.t="1";if(e.target&&e.target.id==="pcs-all")document.querySelectorAll(".pcs-c").forEach(c=>c.checked=e.target.checked)});
