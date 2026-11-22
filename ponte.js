@@ -39,10 +39,10 @@ function telaLogin(msg){
   <label id="acl-pw">Senha<input id="acl-senha" type="password" autocomplete="current-password" minlength="6"></label>
   <div class="m" id="acl-msg">${msg||""}</div>
   <button class="p" type="submit" id="acl-go">Entrar</button>
-  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><button type="button" class="lk" id="acl-novo">Primeiro acesso: criar minha senha</button><button type="button" class="lk" id="acl-esq">Esqueci a senha</button></div></form>`;
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><span></span><button type="button" class="lk" id="acl-esq">Esqueci a senha</button></div></form>`;
   const $=s=>document.getElementById(s);let modo="entrar";
   const set=m=>{modo=m;$("acl-nw").hidden=m!=="criar";$("acl-pw").hidden=m==="esqueci";$("acl-go").textContent=m==="criar"?"Criar acesso":m==="esqueci"?"Enviar link para o e-mail":"Entrar";$("acl-senha").autocomplete=m==="criar"?"new-password":"current-password";$("acl-msg").textContent="";$("acl-msg").className="m"};
-  $("acl-novo").onclick=()=>set(modo==="criar"?"entrar":"criar");$("acl-esq").onclick=()=>set(modo==="esqueci"?"entrar":"esqueci");
+  $("acl-esq").onclick=()=>set(modo==="esqueci"?"entrar":"esqueci");
   $("acl-lf").onsubmit=async e=>{e.preventDefault();const em0=$("acl-email").value.trim().toLowerCase(),em=em0.includes("@")?em0:em0.replace(/[^a-z0-9._-]/g,"")+"@acl.sistema",pw=$("acl-senha").value;const ms=$("acl-msg");ms.className="m";ms.textContent="Aguarde…";
     try{if(modo==="esqueci"){const{error}=await sb.auth.resetPasswordForEmail(em,{redirectTo:location.href.split("#")[0]});if(error)throw error;ms.className="m ok";ms.textContent="Enviamos um link para "+em+". Abra o e-mail e siga as instruções.";return}
       if(!pw||pw.length<6){ms.textContent="A senha precisa ter pelo menos 6 caracteres.";return}
