@@ -1332,13 +1332,16 @@ async function neImportarXml(files){let ok=0,dup=0,err=0;for(const f of files){t
     if(ex&&(ex.itens||[]).length){dup++;continue}const arq=await neGuardarXml(txt,nf.chave);const now=new Date().toISOString();
     const d=Object.assign({},nf,{xml:arq,carregadaEm:now});if(ex)await S.db.doc("notasEntrada/"+ex.id).update(d);else await S.db.collection("notasEntrada").add(Object.assign(d,{origem:"xml",status:"pendente",criadoEm:now,por:S.uid||""}));ok++}catch(e){err++;toast(f.name+": "+(e.message||e),true)}}
   toast((ok?ok+" nota(s) importada(s)":"Nenhuma nota nova")+(dup?" · "+dup+" já estava(m) no sistema":"")+(err?" · "+err+" com erro":""))}
-async function neBuscarFocus(btn,silencio){if(btn)btn.disabled=true;let novas=0,atual=0;try{let versao=0;try{const c=await S.db.doc("config/nfeRec").get();const cd=c&&(c.data?c.data():c);versao=+(cd&&cd.versao)||0}catch(e){}
+let NE_BUSCA=null;
+function neBuscarFocus(btn,silencio){if(NE_BUSCA){if(btn&&!silencio)toast("A busca na SEFAZ já está rodando. Aguarde um instante.");return NE_BUSCA}NE_BUSCA=neBuscarFocus0(btn,silencio).finally(()=>{NE_BUSCA=null});return NE_BUSCA}
+async function neBuscarFocus0(btn,silencio){if(btn)btn.disabled=true;let novas=0,atual=0;try{let versao=0;try{const c=await S.db.doc("config/nfeRec").get();const cd=c&&(c.data?c.data():c);versao=+(cd&&cd.versao)||0}catch(e){}
     for(let pg=0;pg<30;pg++){const r=await nfeCall({acao:"rec_lista",versao});if(r.status!==200){const m=r.dados&&(r.dados.mensagem||r.dados.codigo||r.dados.texto);throw new Error("A Focus respondeu: "+(m||("erro "+r.status)))}
       const L=Array.isArray(r.dados)?r.dados:[];let maxV=versao;
       for(const n of L){const chave=soDig(n.chave_nfe||n.chave);if(chave.length!==44)continue;maxV=Math.max(maxV,+n.versao||0);const ex=neAtivas().find(x=>soDig(x.chave)===chave)||(S.nent||[]).find(x=>soDig(x.chave)===chave);
         const base={situacaoSefaz:n.situacao||"",manifestacao:n.manifestacao_destinatario||"",completa:!!n.nfe_completa};
         if(ex){await S.db.doc("notasEntrada/"+ex.id).update(base);atual++}
-        else{await S.db.collection("notasEntrada").add(Object.assign(base,{origem:"focus",chave,numero:String(parseInt(chave.slice(25,34),10)),serie:String(parseInt(chave.slice(22,25),10)),emitNome:n.nome_emitente||"",emitCnpj:soDig(n.documento_emitente||n.cnpj_emitente||chave.slice(6,20)),dataEmissao:String(n.data_emissao||"").slice(0,10),valor:+n.valor_total||0,itens:[],duplicatas:[],status:"pendente",criadoEm:new Date().toISOString(),por:S.uid||""}));novas++}}
+        else{const ref=S.db.doc("notasEntrada/nfe"+chave);let ja=null;try{const g=await ref.get();ja=g&&g.exists?g:null}catch(e){}if(ja){await ref.update(base);atual++;continue}await ref.set(Object.assign(base,{origem:"focus",chave,numero:String(parseInt(chave.slice(25,34),10)),serie:String(parseInt(chave.slice(22,25),10)),emitNome:n.nome_emitente||"",emitCnpj:soDig(n.documento_emitente||n.cnpj_emitente||chave.slice(6,20)),dataEmissao:String(n.data_emissao||"").slice(0,10),valor:+n.valor_total||0,itens:[],duplicatas:[],status:"pendente",criadoEm:new Date().toISOString(),por:S.uid||""}));novas++}}
+      if(L.length)await new Promise(r=>setTimeout(r,800));
       if(maxV>versao){versao=maxV;try{await S.db.doc("config/nfeRec").set({versao,em:new Date().toISOString()})}catch(e){}}
       if(L.length<100)break}
     if(!silencio)toast(novas?novas+" nota(s) nova(s) da SEFAZ. Lançando as que o sistema já conhece…":atual?"Nenhuma nota nova. "+atual+" atualizada(s).":"Nenhuma nota nova encontrada. A primeira busca da Focus na SEFAZ pode levar algumas horas.");if(!silencio&&novas)setTimeout(()=>neAuto(true),1500)}
@@ -1407,11 +1410,17 @@ async function neDarEntrada(x,btn){const rows=[...document.querySelectorAll("#ne
 function neMapaAuto(x){const f=x.fornecedorId?fornBy(x.fornecedorId):neFornDe(x.emitCnpj);if(!f||!f.depara)return null;const L=[];
   for(const it of x.itens||[]){const dp=f.depara[neKey(it.cProd)];if(!dp)return null;if(dp.ignorar){L.push({it,ins:null,fat:1,ign:true});continue}const ins=insBy(dp.insumoId);if(!ins||ins.ativo===false)return null;L.push({it,ins,fat:+dp.fator||1,ign:false})}
   return L.length&&L.some(r=>!r.ign)?L:null}
+/* notas repetidas (mesma chave de acesso): fica uma, as outras vão para Ignoradas */
+async function neDedup(){const g={};for(const x of S.nent||[]){const k=soDig(x.chave);if(k.length!==44||x.status==="ignorada")continue;(g[k]=g[k]||[]).push(x)}let n=0;
+  const pr=x=>(x.status==="lancada"?4:0)+((x.itens||[]).length?2:0)+(x.fornecedorId?1:0);
+  for(const k in g){const L=g[k];if(L.length<2)continue;L.sort((a,b)=>pr(b)-pr(a)||String(a.criadoEm||"").localeCompare(String(b.criadoEm||"")));
+    for(const x of L.slice(1)){if(x.status!=="pendente")continue;try{await S.db.doc("notasEntrada/"+x.id).update({status:"ignorada",motivoIgnorar:"Cópia repetida da mesma nota (mesma chave de acesso). A nota que vale continua nas pendentes.",repetidaDe:L[0].id,ignoradaEm:new Date().toISOString(),ignoradaPor:"sistema"});n++}catch(e){}}}
+  return n}
 let NE_AUTO_RUN=false;
 async function neAuto(manual){if(NE_AUTO_RUN||!S.db||!window.SB)return;const pf=meusPerfis();if(!(S.isAdmin||pf.includes("almox")||pf.includes("pcp")))return;
   if(!manual){try{const c=await S.db.doc("config/nfeAuto").get();const cd=c&&(c.data?c.data():c);if(cd&&cd.em&&Date.now()-new Date(cd.em).getTime()<50*60000)return}catch(e){}}
   NE_AUTO_RUN=true;let lanc=0,carreg=0;try{try{await S.db.doc("config/nfeAuto").set({em:new Date().toISOString(),por:S.uid||""})}catch(e){}
-    if(!manual)await neBuscarFocus(null,true);await new Promise(r=>setTimeout(r,1500));
+    if(!manual)await neBuscarFocus(null,true);await new Promise(r=>setTimeout(r,1500));await neDedup();await new Promise(r=>setTimeout(r,1000));
     for(const x of neAtivas().filter(y=>y.origem==="focus"&&y.status==="pendente"&&y.situacaoSefaz!=="cancelada"&&!(y.itens||[]).length).slice(0,15)){try{await neCarregarFocus(x);carreg++}catch(e){}}
     await new Promise(r=>setTimeout(r,2000));
     for(const x0 of neAtivas().filter(y=>y.origem==="focus"&&y.status==="pendente"&&y.situacaoSefaz!=="cancelada"&&(y.itens||[]).length)){const x=(S.nent||[]).find(y=>y.id===x0.id);if(!x||x.status!=="pendente"||x.lockAuto)continue;const L=neMapaAuto(x);if(!L||neJaLancada(x))continue;
