@@ -1357,7 +1357,7 @@ function renderNotasEnt(){const at=neAtivas();const pend=at.filter(x=>x.status==
   const qq=norm(($("#ne-q")||{}).value||"");const L=at.filter(tests[fs]).filter(x=>!qq||norm([x.emitNome,x.emitCnpj,neNum(x),x.valor].join(" ")).includes(qq)).sort((a,b)=>String(b.dataEmissao||b.criadoEm).localeCompare(String(a.dataEmissao||a.criadoEm)));
   $("#ne-tbl").innerHTML=L.length?`<table><thead><tr><th>Emissão</th><th>Fornecedor</th><th>Nota</th><th>Origem</th><th class="r">Valor</th><th>Situação</th><th></th></tr></thead><tbody>${L.map(x=>{const s=NE_ST[x.status]||NE_ST.pendente;return `<tr class="click" data-neid="${x.id}"><td class="num">${x.dataEmissao?fdy(x.dataEmissao):"—"}</td><td><b>${esc(x.emitNome||"—")}</b><div class="small muted num">${esc(x.emitCnpj||"")}</div></td><td class="num">${x.origem==="semnf"?esc(x.numero||"recibo"):"NF "+esc(neNum(x))}</td><td>${neOrig(x)}</td><td class="r num">${brl.format(+x.valor||0)}</td><td><span class="pill ${s[1]}">${s[0]}</span>${x.lancadaAuto?' <span class="small muted">automática</span>':""}${x.status==="pendente"&&(x.itens||[]).length&&!neMapaAuto(x)?' <span class="small muted">ligar produtos</span>':""}${x.situacaoSefaz==="cancelada"?' <span class="pill bad">cancelada na SEFAZ</span>':""}</td><td class="r"><button class="btn sm">Abrir</button></td></tr>`}).join("")}</tbody></table>`:`<div class="empty">${at.length?"Nenhuma nota neste filtro.":"Nenhuma nota ainda. Clique em Buscar notas na SEFAZ, importe um XML ou lance uma compra sem nota."}</div>`}
 function neItemRow(it,k,f,dis){const dp=(f&&f.depara&&f.depara[neKey(it.cProd)])||{};const iid=it.insumoId!==undefined?it.insumoId:(dp.insumoId||"");const fat=it.fator||dp.fator||1;const ins=iid?insBy(iid):null;const ign=it.ignorar!==undefined?it.ignorar:!!dp.ignorar;
-  return `<tr data-k="${k}"><td><b>${esc(it.xProd)}</b><div class="small muted">cód. ${esc(it.cProd||"—")}${it.ncm?" · NCM "+esc(it.ncm):""}</div></td><td class="r num">${nq(it.qtd)} ${esc(it.un)}</td><td class="r num">${brl.format(it.vItem||it.vProd||0)}</td>
+  return `<tr data-k="${k}"><td><b>${esc(it.xProd)}</b><div class="small muted">cód. ${esc(it.cProd||"—")}${it.ncm?" · NCM "+esc(it.ncm):""}${it.classe?" · "+esc(it.classe):""}</div></td><td class="r num">${nq(it.qtd)} ${esc(it.un)}</td><td class="r num">${brl.format(it.vItem||it.vProd||0)}</td>
     <td><input class="ne-ins" list="dl-neins" value="${ins?esc(insLabel(ins)):""}" placeholder="Escolha o insumo" ${dis||ign?"disabled":""} style="min-width:220px"></td>
     <td><input class="ne-fat num" type="number" min="0" step="any" value="${fat}" ${dis||ign?"disabled":""} style="width:80px" title="1 ${esc(it.un)} da nota = quantos no estoque"></td>
     <td class="r num ne-qe">${ins?nq((+it.qtd||0)*fat)+" "+esc(ins.unidade||""):"—"}</td><td><label class="chk small"><input type="checkbox" class="ne-ign" ${ign?"checked":""} ${dis?"disabled":""}> não estocar</label></td></tr>`}
@@ -1373,7 +1373,7 @@ function neDetalhe(id){const draw=async()=>{const x=(S.nent||[]).find(y=>y.id===
       <datalist id="dl-neins">${S.ins.filter(i=>i.ativo!==false).map(i=>`<option value="${esc(insLabel(i))}">`).join("")}</datalist></div>
     <div><span class="eyebrow">Vencimentos</span><div class="small">${(x.duplicatas||[]).map(d=>`${d.venc?fdy(d.venc):"—"}: <b>${brl.format(+d.valor||0)}</b>`).join(" · ")||"—"}</div></div>`:""}
     ${lanc?`<div class="small muted">Lançada em ${fdh(x.lancadaEm)} · ${esc(S.names[x.lancadaPor]||"")} · ${(x.movIds||[]).length} entrada(s) no estoque · ${(x.lancIds||[]).length} conta(s) a pagar${x.pagoNaHora?" (já paga)":""}</div>`:""}
-    ${!lanc&&temItens&&!sem&&x.situacaoSefaz!=="cancelada"?`<div class="grid2"><label class="f">Data da entrada no estoque<input id="ne-data" type="date" value="${today()}"></label><label class="chk" style="align-self:end"><input type="checkbox" id="ne-cp" checked> Gerar contas a pagar no Financeiro</label></div>`:""}
+    ${!lanc&&temItens&&!sem&&x.situacaoSefaz!=="cancelada"?`<div class="grid2"><label class="f">Data da entrada no estoque<input id="ne-data" type="date" value="${today()}"></label><label class="chk" style="align-self:end"><input type="checkbox" id="ne-cp" checked> Gerar contas a pagar no Financeiro${today()<NE_CP_DESDE?" (só vencimentos a partir de 04/01/2027; antes disso as contas seguem no JOB)":""}</label></div>`:""}
     <div class="foot">${x.xml?`<a class="btn left" href="${esc(srcDe(x.xml))}" download="${esc((x.chave||"nota")+".xml")}">Baixar XML</a>`:""}
       ${!lanc&&x.status!=="ignorada"?`<button type="button" class="btn" id="ne-ign">Ignorar nota</button>`:""}${x.status==="ignorada"?`<button type="button" class="btn" id="ne-reab">Voltar para pendentes</button>`:""}
       ${lanc&&S.isAdmin?`<button type="button" class="btn danger" id="ne-est">Desfazer lançamento</button>`:""}
@@ -1392,19 +1392,19 @@ async function neFornecedor(x){let f=x.fornecedorId?fornBy(x.fornecedorId):neFor
 function neCatCentro(cats){const catPrinc=Object.keys(cats).sort((a,b)=>cats[b]-cats[a])[0]||"";return{categoria:catPrinc==="embalagem"?"embal":catPrinc==="consumo"?"escritorio":"mp",centro:["tecidos","impressao","aplique","aviamentos"].includes(catPrinc)?"tecidos":["metal","madeira"].includes(catPrinc)?"estruturas":"compart"}}
 async function neLancar(x,L,o){o=o||{};const num=neNum(x);const data=o.data||today();const now=new Date().toISOString();const iso=data===today()?now:data+"T12:00:00";const f=await neFornecedor(x);const fid=f?f.id:"";
   const movIds=[],cats={};const dep=Object.assign({},(f&&f.depara)||{});
-  for(const r of L){dep[neKey(r.it.cProd)]=r.ign?{ignorar:true,desc:r.it.xProd}:{insumoId:r.ins.id,fator:r.fat,desc:r.it.xProd};if(r.ign)continue;const q=r2((+r.it.qtd||0)*r.fat);const cu=q?Math.round((r.it.vItem||r.it.vProd||0)/q*10000)/10000:0;cats[r.ins.categoria]=(cats[r.ins.categoria]||0)+(r.it.vItem||0);
+  for(const r of L){dep[neKey(r.it.cProd)]=r.ign?{ignorar:true,desc:r.it.xProd,classe:r.classe||""}:{insumoId:r.ins.id,fator:r.fat,desc:r.it.xProd};if(r.ign)continue;const q=r2((+r.it.qtd||0)*r.fat);const cu=q?Math.round((r.it.vItem||r.it.vProd||0)/q*10000)/10000:0;cats[r.ins.categoria]=(cats[r.ins.categoria]||0)+(r.it.vItem||0);
     const ref=await S.db.collection("movimentos").add({tipo:"entrada",insumoId:r.ins.id,qtd:q,custoUnit:cu,fornecedorId:fid,nf:num,obs:"NF "+num+" · "+(x.emitNome||"")+(o.auto?" (lançada automaticamente)":""),data:iso,por:S.uid||"",notaEntradaId:x.id});movIds.push(ref.id);
     if(cu>0)await S.db.collection("cotacoes").add({insumoId:r.ins.id,fornecedorId:fid,preco:cu,data,prazoDias:null,obs:"NF "+num,origem:"nota",por:S.uid||"",criadoEm:now})}
   if(fid)try{await S.db.doc("fornecedores/"+fid).update({depara:dep})}catch(e){}
-  const lancIds=[];if(o.cp!==false&&+x.valor>0){const{categoria,centro}=neCatCentro(cats);const ds=(x.duplicatas||[]).filter(d=>+d.valor>0);const n=ds.length;
+  const lancIds=[];if(o.cp!==false&&+x.valor>0){const{categoria,centro}=o.conta||neCatCentro(cats);const ds=(x.duplicatas||[]).filter(d=>+d.valor>0&&(!o.cpDesde||String(d.venc||data)>=o.cpDesde));const n=ds.length;
     for(let k=0;k<n;k++){const d=ds[k];const ref=await S.db.collection("lancamentos").add({tipo:"pagar",descricao:"NF "+num+" · "+(x.emitNome||""),favorecido:x.emitNome||"",valor:r2(d.valor),vencimento:d.venc||data,competencia:(x.dataEmissao||data).slice(0,7),categoria,centro,documento:"NF "+num,obs:x.chave?"Chave "+x.chave:"",status:"aberto",parcela:n>1?(k+1)+"/"+n:"",grupo:"nfe-"+x.id,notaEntradaId:x.id,criadoEm:now,por:S.uid||"",hist:[{em:now,por:S.uid||"",acao:"criou",det:"gerado pela nota de compra NF "+num+(o.auto?" (automático)":"")}]});lancIds.push(ref.id)}}
-  await S.db.doc("notasEntrada/"+x.id).update({status:"lancada",fornecedorId:fid,movIds,lancIds,lancadaEm:now,lancadaPor:S.uid||"",lancadaAuto:!!o.auto,itens:x.itens.map((it,k)=>Object.assign({},it,{insumoId:L[k].ins?L[k].ins.id:"",fator:L[k].fat,ignorar:L[k].ign}))});
+  await S.db.doc("notasEntrada/"+x.id).update({status:"lancada",fornecedorId:fid,movIds,lancIds,lancadaEm:now,lancadaPor:S.uid||"",lancadaAuto:!!o.auto,lancadaIA:!!o.ia,cpDesde:o.cpDesde||"",itens:x.itens.map((it,k)=>Object.assign({},it,{insumoId:L[k].ins?L[k].ins.id:"",fator:L[k].fat,ignorar:L[k].ign,classe:L[k].classe||it.classe||""}))});
   if(x.origem==="focus")nfeCall({acao:"rec_manifesto",chave:x.chave,tipo:"confirmacao"}).then(r=>{if(r.status<300)S.db.doc("notasEntrada/"+x.id).update({manifestacao:"confirmacao"})}).catch(()=>{});
   return{movIds,lancIds}}
 const neJaLancada=x=>{const num=neNum(x);const fx=neFornDe(x.emitCnpj);return!!(fx&&S.movs.some(m=>m.tipo==="entrada"&&m.fornecedorId===fx.id&&String(m.nf||"").replace(/\D/g,"")===num))};
 async function neDarEntrada(x,btn){const rows=[...document.querySelectorAll("#ne-itens tr")];const L=rows.map(tr=>{const it=x.itens[+tr.dataset.k];const ins=S.ins.find(i=>insLabel(i)===tr.querySelector(".ne-ins").value);return{it,ins,fat:parseFloat(tr.querySelector(".ne-fat").value)||1,ign:tr.querySelector(".ne-ign").checked}});
   const falta=L.filter(r=>!r.ign&&!r.ins);if(falta.length)return toast("Ligue ao estoque (ou marque \"não estocar\"): "+falta.map(r=>r.it.xProd).slice(0,3).join("; ")+(falta.length>3?"…":""),true);
-  const go=async()=>{btn.disabled=true;try{const r=await neLancar(x,L,{data:$("#ne-data").value||today(),cp:$("#ne-cp").checked});toast("Entrada feita: "+r.movIds.length+" item(ns) no estoque"+(r.lancIds.length?" e "+r.lancIds.length+" conta(s) a pagar":""));closeModal()}catch(err){btn.disabled=false;toast(errMsg(err),true)}};
+  const go=async()=>{btn.disabled=true;try{const r=await neLancar(x,L,{data:$("#ne-data").value||today(),cp:$("#ne-cp").checked,cpDesde:NE_CP_DESDE});toast("Entrada feita: "+r.movIds.length+" item(ns) no estoque"+(r.lancIds.length?" e "+r.lancIds.length+" conta(s) a pagar":""));closeModal()}catch(err){btn.disabled=false;toast(errMsg(err),true)}};
   if(neJaLancada(x))confirmBox("Esta NF já parece lançada","Já existe entrada no estoque com a NF "+neNum(x)+" deste fornecedor (talvez pelo recebimento de um pedido de compra). Dar entrada de novo vai duplicar o estoque e o A pagar.","Dar entrada mesmo assim",go);else go()}
 /* lançamento automático: notas da SEFAZ cujos produtos o sistema já conhece */
 function neMapaAuto(x){const f=x.fornecedorId?fornBy(x.fornecedorId):neFornDe(x.emitCnpj);if(!f||!f.depara)return null;const L=[];
@@ -1416,6 +1416,35 @@ async function neDedup(){const g={};for(const x of S.nent||[]){const k=soDig(x.c
   for(const k in g){const L=g[k];if(L.length<2)continue;L.sort((a,b)=>pr(b)-pr(a)||String(a.criadoEm||"").localeCompare(String(b.criadoEm||"")));
     for(const x of L.slice(1)){if(x.status!=="pendente")continue;try{await S.db.doc("notasEntrada/"+x.id).update({status:"ignorada",motivoIgnorar:"Cópia repetida da mesma nota (mesma chave de acesso). A nota que vale continua nas pendentes.",repetidaDe:L[0].id,ignoradaEm:new Date().toISOString(),ignoradaPor:"sistema"});n++}catch(e){}}}
   return n}
+/* IA: classifica os produtos da nota, cadastra no estoque o que for material e liga tudo sozinha */
+const NE_CP_DESDE="2027-01-04";
+const NE_UNS=["m","m²","kg","g","un","rolo","chapa","barra","L","ml","pct","cx","par"];
+const NE_PRE={tecidos:"TEC",impressao:"IMP",aplique:"APL",aviamentos:"AVI",metal:"MET",madeira:"MAD",embalagem:"EMB",consumo:"CON"};
+const NE_TIPO={materia_prima:"matéria-prima",embalagem:"embalagem",consumo_producao:"consumo da produção",obra:"obra/construção",patrimonio:"máquina/patrimônio",uso_consumo:"uso e consumo",servico:"serviço",outro:"outro"};
+const NE_CONTAS=["mp","embal","escritorio","predial","manut","ferram","invest","veiculo","marketing","sistemas","frete","terc"];
+let NE_NOVOS=[];
+const neNorm=t=>String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+function neNextCode(cat){const pre=NE_PRE[cat]||"ITM";let max=0;S.ins.concat(NE_NOVOS).forEach(i=>{const m=String(i.codigo||"").match(new RegExp("^"+pre+"-(\\d+)$"));if(m)max=Math.max(max,+m[1])});return pre+"-"+String(max+1).padStart(4,"0")}
+const neInsTodos=()=>{const ids=new Set(S.ins.map(i=>i.id));return S.ins.concat(NE_NOVOS.filter(i=>!ids.has(i.id)))};
+async function neIaClassificar(x){const f=x.fornecedorId?fornBy(x.fornecedorId):neFornDe(x.emitCnpj);const dep=(f&&f.depara)||{};const L=[],pend=[];const todos=neInsTodos();
+  (x.itens||[]).forEach((it,k)=>{const dp=dep[neKey(it.cProd)];if(dp&&dp.ignorar){L[k]={it,ins:null,fat:1,ign:true,classe:dp.classe||""};return}
+    if(dp&&dp.insumoId){const ins=todos.find(i=>i.id===dp.insumoId);if(ins&&ins.ativo!==false){L[k]={it,ins,fat:+dp.fator||1,ign:false};return}}pend.push(k)});
+  const cont={},cen={};
+  if(pend.length){if(!window.SB||!window.SB.functions)throw new Error("IA indisponível");
+    const body={modo:"classificar",fornecedor:x.emitNome||"",itens:pend.map(k=>{const it=x.itens[k];return{k,produto:it.xProd,ncm:it.ncm||"",cfop:it.cfop||"",un:it.un||"",qtd:it.qtd,valor_unit:it.vUn||"",valor_total:it.vItem}}),
+      insumos:todos.filter(i=>i.ativo!==false).map(i=>[i.id,i.nome,i.unidade||"",i.categoria||""])};
+    const r=await window.SB.functions.invoke("ia-foto",{body});if(r.error){let m=r.error.message;try{const j=await r.error.context.json();m=j.erro||m}catch(e){}throw new Error(m)}if(r.data&&r.data.erro)throw new Error(r.data.erro);
+    const R=((r.data&&r.data.dados&&r.data.dados.itens)||[]);
+    for(const k of pend){const it=x.itens[k];const c=R.find(z=>+z.k===k);if(!c)throw new Error("A IA não classificou o produto "+it.xProd);
+      const classe=(NE_TIPO[c.tipo]||c.tipo||"")+(c.motivo?" (IA: "+String(c.motivo).slice(0,90)+")":" (IA)");if(NE_CONTAS.includes(c.conta))cont[c.conta]=(cont[c.conta]||0)+(+it.vItem||0);if(["tecidos","estruturas","compart"].includes(c.centro))cen[c.centro]=(cen[c.centro]||0)+(+it.vItem||0);
+      if(c.destino!=="estoque"){L[k]={it,ins:null,fat:1,ign:true,classe};continue}
+      let ins=c.insumo_id?neInsTodos().find(i=>i.id===c.insumo_id&&i.ativo!==false):null;const un=NE_UNS.includes(c.unidade)?c.unidade:"un";const fat=+c.fator>0?+c.fator:1;
+      if(!ins){const nome=String(c.nome||it.xProd).trim().slice(0,120);ins=neInsTodos().find(i=>i.ativo!==false&&neNorm(i.nome)===neNorm(nome)&&(i.unidade||"")===un);
+        if(!ins){const cat=NE_PRE[c.categoria]?c.categoria:"consumo";const d={nome,categoria:cat,unidade:un,minimo:0,local:"",obs:"Cadastrado automaticamente pela IA a partir da NF "+neNum(x)+" · "+(x.emitNome||"")+" · produto na nota: "+it.xProd,codigo:neNextCode(cat),ativo:true,criadoEm:new Date().toISOString(),criadoAuto:true};
+          const ref=await S.db.collection("insumos").add(d);ins=Object.assign({id:ref.id},d);NE_NOVOS.push(ins)}}
+      L[k]={it,ins,fat,ign:false,classe}}}
+  const top=Object.keys(cont).sort((a,b)=>cont[b]-cont[a])[0];const ctr=Object.keys(cen).sort((a,b)=>cen[b]-cen[a])[0]||"compart";const conta=top?{categoria:top,centro:ctr}:null;
+  return{L,conta}}
 let NE_AUTO_RUN=false;
 async function neAuto(manual){if(NE_AUTO_RUN||!S.db||!window.SB)return;const pf=meusPerfis();if(!(S.isAdmin||pf.includes("almox")||pf.includes("pcp")))return;
   if(!manual){try{const c=await S.db.doc("config/nfeAuto").get();const cd=c&&(c.data?c.data():c);if(cd&&cd.em&&Date.now()-new Date(cd.em).getTime()<50*60000)return}catch(e){}}
@@ -1423,9 +1452,12 @@ async function neAuto(manual){if(NE_AUTO_RUN||!S.db||!window.SB)return;const pf=
     if(!manual)await neBuscarFocus(null,true);await new Promise(r=>setTimeout(r,1500));await neDedup();await new Promise(r=>setTimeout(r,1000));
     for(const x of neAtivas().filter(y=>y.origem==="focus"&&y.status==="pendente"&&y.situacaoSefaz!=="cancelada"&&!(y.itens||[]).length).slice(0,15)){try{await neCarregarFocus(x);carreg++}catch(e){}}
     await new Promise(r=>setTimeout(r,2000));
-    for(const x0 of neAtivas().filter(y=>y.origem==="focus"&&y.status==="pendente"&&y.situacaoSefaz!=="cancelada"&&(y.itens||[]).length)){const x=(S.nent||[]).find(y=>y.id===x0.id);if(!x||x.status!=="pendente"||x.lockAuto)continue;const L=neMapaAuto(x);if(!L||neJaLancada(x))continue;
+    let nIa=0;for(const x0 of neAtivas().filter(y=>y.origem==="focus"&&y.status==="pendente"&&y.situacaoSefaz!=="cancelada"&&(y.itens||[]).length).sort((a,b)=>String(a.dataEmissao||"").localeCompare(String(b.dataEmissao||"")))){const x=(S.nent||[]).find(y=>y.id===x0.id);if(!x||x.status!=="pendente"||x.lockAuto||neJaLancada(x))continue;
+      let L=neMapaAuto(x),conta=null,ia=false;if(!L&&nIa>=30)continue;
       const tk=(S.uid||"")+"-"+Date.now();await S.db.doc("notasEntrada/"+x.id).update({lockAuto:tk});await new Promise(r=>setTimeout(r,1500));const y=(S.nent||[]).find(z=>z.id===x.id);if(!y||y.lockAuto!==tk||y.status!=="pendente")continue;
-      try{await neLancar(y,L,{auto:true});lanc++}catch(e){await S.db.doc("notasEntrada/"+x.id).update({lockAuto:""})}}
+      try{if(!L){nIa++;const c=await neIaClassificar(y);L=c.L;conta=c.conta;ia=true}
+        await neLancar(y,L,{auto:true,ia,conta,data:y.dataEmissao||today(),cpDesde:NE_CP_DESDE});lanc++}
+      catch(e){await S.db.doc("notasEntrada/"+x.id).update({lockAuto:"",erroAuto:String(e&&e.message||e).slice(0,200)})}}
     await new Promise(r=>setTimeout(r,1500));const esp=neAtivas().filter(y=>y.origem==="focus"&&y.status==="pendente"&&y.situacaoSefaz!=="cancelada"&&(y.itens||[]).length&&!neMapaAuto(y)).length;if(lanc||(carreg&&esp))toast((lanc?lanc+" nota(s) de compra lançada(s) automaticamente":"")+(lanc&&esp?" · ":"")+(esp?esp+" nota(s) esperando ligação dos produtos (PCP → Notas de compra)":""))}
   catch(e){}finally{NE_AUTO_RUN=false}}
 setTimeout(()=>neAuto(false),20000);setInterval(()=>neAuto(false),60*60000);
